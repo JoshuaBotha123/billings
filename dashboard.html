@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Dashboard · GBS</title>
+  <link rel="icon" href="assets/gbs-logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="st-none">
+  <div class="status-strip"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="logo" src="assets/gbs-logo.png" alt="Global Business Solutions">
+      <nav class="nav">
+        <a href="my-billings.html">My billings</a>
+        <a href="dashboard.html" class="active">Dashboard</a>
+        <a href="finance.html" id="finance-link" hidden>Finance &amp; admin</a>
+      </nav>
+      <div class="user-chip">
+        <span><strong id="user-name" style="color:var(--ink)">…</strong> <span class="email" id="user-email"></span></span>
+        <span class="pill" id="user-role">—</span>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <div class="month-switch">
+        <button class="icon-btn" id="prev-year" aria-label="Previous year">‹</button>
+        <h1 id="year-label" style="min-width:90px">—</h1>
+        <button class="icon-btn" id="next-year" aria-label="Next year">›</button>
+        <select class="view-select" id="view-select" hidden></select>
+      </div>
+      <div class="head-actions" style="align-items:center">
+        <label class="check-inline"><input type="checkbox" id="incl-drafts" checked> Include unsubmitted drafts</label>
+      </div>
+    </div>
+
+    <!-- Hero: projection vs target -->
+    <section class="hero" id="hero">
+      <div class="hero-top">
+        <div>
+          <div class="k" id="hero-label">Projected fees for the year</div>
+          <div class="big" id="hero-value">—</div>
+          <div class="why" id="hero-why">&nbsp;</div>
+        </div>
+        <div style="text-align:right">
+          <span class="status-badge" id="status-badge">—</span>
+        </div>
+      </div>
+      <div class="meter" id="meter" title="">
+        <div class="proj" id="meter-proj"></div>
+        <div class="act" id="meter-act"></div>
+        <div class="pace" id="meter-pace" hidden></div>
+        <div class="tgt" id="meter-tgt"></div>
+      </div>
+      <div class="meter-legend" id="meter-legend"></div>
+      <div class="hero-facts" style="margin-top:16px" id="hero-facts"></div>
+    </section>
+
+    <section class="kpis" id="kpis-1"></section>
+    <section class="kpis" id="kpis-2"></section>
+
+    <section class="charts">
+      <div class="chart-card wide">
+        <h3>Month by month</h3>
+        <div class="csub" id="c-months-sub">Fees excl. VAT</div>
+        <div class="chart-box"><canvas id="c-months" role="img" aria-label="Fees per month this year compared with last year"></canvas></div>
+      </div>
+      <div class="chart-card wide">
+        <h3>Progress to target</h3>
+        <div class="csub" id="c-cum-sub">Running total for the year</div>
+        <div class="chart-box"><canvas id="c-cum" role="img" aria-label="Cumulative fees compared with target pace"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Busiest days of the week</h3>
+        <div class="csub" id="c-dow-sub">Fees by the day the work was done</div>
+        <div class="chart-box"><canvas id="c-dow" role="img" aria-label="Fees by day of the week"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="seg" id="mix-seg">
+          <button data-mix="service_area" class="active">Service</button>
+          <button data-mix="client_name">Client</button>
+          <button data-mix="work_type">Type</button>
+        </div>
+        <h3>Where the work comes from</h3>
+        <div class="csub" id="c-mix-sub">Share of fees this year</div>
+        <div class="chart-box"><canvas id="c-mix" role="img" aria-label="Fees by source"></canvas></div>
+      </div>
+      <div class="chart-card wide">
+        <h3>Year vs year</h3>
+        <div class="csub">Same months compared, so a part-year is compared fairly</div>
+        <div class="table-wrap" id="yoy-table"></div>
+      </div>
+    </section>
+
+    <!-- Company only -->
+    <section id="company-only" hidden>
+      <div class="panel-card">
+        <h3>Consultants <span class="spacer"></span><span class="note">Each person is credited only with their share of split billings. Click a name to open their dashboard.</span></h3>
+        <div class="table-wrap" id="league"></div>
+      </div>
+      <div class="panel-card" id="targets-card">
+        <h3>Year targets <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm admin-only" id="copy-targets">Copy last year's targets</button>
+        </h3>
+        <div class="panel-body" style="padding-bottom:6px"><p class="hint" style="margin:0" id="targets-hint">Fees excl. VAT for the calendar year. The company target is the total of everyone's targets.</p></div>
+        <div class="table-wrap" id="targets-table"></div>
+      </div>
+    </section>
+
+    <p class="note" style="margin-top:8px">All figures are professional fees excluding VAT. Travel, car hire and accommodation are cost recoveries and don't count towards targets. Split billings count only each person's share.</p>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <script src="config.js"></script>
+  <script>
+  // =====================================================================
+  // GBS Billings — Dashboards (Step 5)
+  // =====================================================================
+  const cfg = window.GBS_CONFIG;
+  const sb  = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  const $   = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const money = (n) => "R " + Math.round(Number(n || 0)).toLocaleString("en-US");
+  const compact = (n) => { const a = Math.abs(n); return a >= 1e6 ? "R " + (n / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M" : a >= 1e3 ? "R " + Math.round(n / 1e3) + "K" : "R " + Math.round(n); };
+  const pct = (x, d = 0) => (x * 100).toFixed(d) + "%";
+  const sum = (a) => a.reduce((s, v) => s + (Number(v) || 0), 0);
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MONTHS_LONG = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const DAYS_LONG = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+  const todaySA = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10);
+  const dow = (s) => { const [y, m, d] = s.split("-").map(Number); return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; }; // 0 = Mon
+
+  // Chart colours (validated: GBS blue + neutrals; status colours only for target state)
+  const C = { blue: "#2050A0", blueWash: "rgba(32,80,160,.10)", ly: "#A1A1A6", lyLight: "#C7C7CC", ink: "#3A3A3C", grid: "#EEEEF0", muted: "#6E6E73",
+              good: "#1E8E3E", close: "#B25E00", bad: "#D70015" };
+
+  const state = {
+    user: null, profile: null, role: "",
+    year: Number(todaySA().slice(0, 4)),
+    view: "me",                      // "me" | "company" | <consultant uuid>
+    people: [], rows: [], targets: [], amberPct: 10,
+    mix: "service_area", charts: {},
+  };
+  const leader = () => ["admin", "finance", "executive"].includes(state.role);
+  const isAdmin = () => state.role === "admin";
+
+  let toastTimer;
+  function toast(text, kind = "") { const t = $("toast"); t.textContent = text; t.className = "toast " + kind; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200); }
+
+  // =====================================================================
+  // Loading
+  // =====================================================================
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return location.replace("index.html");
+    state.user = session.user;
+    const { data: profile } = await sb.from("profiles").select("full_name, role, active").eq("id", state.user.id).single();
+    if (!profile || !profile.active) return location.replace("my-billings.html");
+    state.profile = profile; state.role = profile.role;
+    $("user-name").textContent = profile.full_name || state.user.email;
+    $("user-email").textContent = state.user.email;
+    $("user-role").textContent = profile.role;
+    $("finance-link").hidden = !leader();
+    document.querySelectorAll(".admin-only").forEach((el) => (el.hidden = !isAdmin()));
+
+    const { data: s } = await sb.from("app_settings").select("key, value").eq("key", "target_amber_pct");
+    state.amberPct = Number(s?.[0]?.value) || 10;
+
+    if (leader()) {
+      const { data } = await sb.rpc("admin_list_users");
+      state.people = (data || []).filter((p) => p.active || true);
+      state.view = new URLSearchParams(location.search).get("view") || "company";
+      buildViewSelect();
+    }
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = C.muted;
+    await load();
+  }
+
+  function buildViewSelect() {
+    const billers = state.people.filter((p) => p.submits_billings || p.id === state.user.id);
+    $("view-select").innerHTML =
+      `<option value="company">Whole company</option>` +
+      `<option value="${state.user.id}">My dashboard</option>` +
+      `<optgroup label="Consultants">${billers.filter((p) => p.id !== state.user.id)
+        .map((p) => `<option value="${p.id}">${esc(p.full_name || p.email)}${p.active ? "" : " (inactive)"}</option>`).join("")}</optgroup>`;
+    $("view-select").value = state.view === "me" ? state.user.id : state.view;
+    $("view-select").hidden = false;
+  }
+
+  const viewConsultant = () => state.view === "company" ? null : state.view === "me" ? state.user.id : state.view;
+
+  async function load() {
+    $("year-label").textContent = state.year;
+    const y = state.year;
+    const who = viewConsultant();
+    const [r, t] = await Promise.all([
+      sb.rpc("dashboard_rows", { p_from: `${y - 1}-01-01`, p_to: `${y}-12-31`, p_consultant: who }),
+      sb.from("consultant_targets").select("consultant_id, year, target_amount").in("year", [y - 1, y]),
+    ]);
+    if (r.error) { toast("Could not load the dashboard: " + r.error.message, "error"); return; }
+    state.rows = r.data || [];
+    state.targets = t.data || [];
+    render();
+  }
+
+  // =====================================================================
+  // Maths
+  // =====================================================================
+  function rowsFor(year, who = undefined) {
+    const incl = $("incl-drafts").checked;
+    return state.rows.filter((r) => r.work_date.startsWith(String(year)) && (incl || r.status !== "draft")
+      && (who === undefined || r.credited_to === who));
+  }
+  function byMonth(rows) { const m = Array(12).fill(0); rows.forEach((r) => (m[+r.work_date.slice(5, 7) - 1] += Number(r.fee_share))); return m; }
+  function targetFor(year, who) {
+    const list = state.targets.filter((t) => t.year === year);
+    if (who) return Number(list.find((t) => t.consultant_id === who)?.target_amount || 0);
+    return sum(list.map((t) => t.target_amount));
+  }
+
+  // Projection: completed months are actual; remaining months follow last year's seasonal
+  // pattern scaled by this year's growth (when there's enough history), otherwise the
+  // average of the months billed so far.
+  function project(cur, ly, year) {
+    const today = todaySA(), curY = +today.slice(0, 4), curM = +today.slice(5, 7) - 1;
+    if (year < curY) return { value: sum(cur), monthly: cur.slice(), method: "Year complete — actual figures", done: 12 };
+    if (year > curY) return { value: 0, monthly: Array(12).fill(0), method: "This year hasn't started yet", done: 0 };
+    const monthly = cur.slice();
+    const done = cur.slice(0, curM), doneSum = sum(done);
+    const first = cur.findIndex((v) => v > 0);
+    const lyDone = sum(ly.slice(0, curM)), lyMonths = ly.filter((v) => v > 0).length;
+    let method;
+    if (curM >= 2 && lyDone > 0 && lyMonths >= 6 && doneSum > 0) {
+      const growth = doneSum / lyDone;
+      for (let m = curM; m < 12; m++) monthly[m] = m === curM ? Math.max(cur[m], ly[m] * growth) : ly[m] * growth;
+      method = `Follows last year's monthly pattern, adjusted for this year running ${growth >= 1 ? "+" : ""}${pct(growth - 1)} vs the same months last year.`;
+    } else if (doneSum > 0 && first > -1 && first < curM) {
+      const months = curM - first, avg = doneSum / months;
+      for (let m = curM; m < 12; m++) monthly[m] = m === curM ? Math.max(cur[m], avg) : avg;
+      method = `Based on the average of ${money(avg)} per month from ${MONTHS[first]} to ${MONTHS[curM - 1]}.`;
+    } else {
+      const d = +today.slice(8, 10), dim = new Date(Date.UTC(curY, curM + 1, 0)).getUTCDate();
+      const est = cur[curM] / Math.max(d / dim, 0.25);
+      for (let m = curM; m < 12; m++) monthly[m] = est;
+      method = cur[curM] > 0 ? `Early estimate from ${MONTHS_LONG[curM]} so far — becomes more accurate after a full month.` : "Not enough billings yet to project.";
+    }
+    return { value: sum(monthly), monthly, method, done: curM };
+  }
+
+  function statusOf(projected, target) {
+    if (!target) return { key: "none", label: "No target set", icon: "○" };
+    const ratio = projected / target;
+    if (ratio >= 1) return { key: "good", label: "On track", icon: "▲", ratio };
+    if (ratio >= 1 - state.amberPct / 100) return { key: "close", label: "Close to target", icon: "●", ratio };
+    return { key: "bad", label: "Below target", icon: "▼", ratio };
+  }
+
+  function yearFraction(year) {
+    const today = todaySA(), curY = +today.slice(0, 4);
+    if (year < curY) return 1; if (year > curY) return 0;
+    const start = Date.UTC(year, 0, 1), end = Date.UTC(year + 1, 0, 1), now = Date.parse(today + "T12:00:00Z");
+    return (now - start) / (end - start);
+  }
+
+  const deltaHtml = (a, b, label) => {
+    if (!b) return a ? `<span class="note">no ${esc(label)} figures to compare</span>` : "";
+    const d = a / b - 1;
+    return `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${pct(Math.abs(d))}</span> vs ${esc(label)}`;
+  };
+
+  // =====================================================================
+  // Render
+  // =====================================================================
+  function render() {
+    const y = state.year, who = viewConsultant();
+    const curRows = rowsFor(y), lyRows = rowsFor(y - 1);
+    const cur = byMonth(curRows), ly = byMonth(lyRows);
+    const target = targetFor(y, who);
+    const proj = project(cur, ly, y);
+    const ytd = sum(cur);
+    const st = statusOf(proj.value, target);
+    document.body.className = "st-" + st.key;
+    $("company-only").hidden = who !== null;
+
+    // ---- Hero
+    const today = todaySA(), curY = +today.slice(0, 4), curM = +today.slice(5, 7) - 1;
+    const isCur = y === curY;
+    const name = who === null ? "GBS" : who === state.user.id ? "You" : (state.people.find((p) => p.id === who)?.full_name || "Consultant");
+    $("hero-label").textContent = y < curY ? `${name} — total fees for ${y}` : `${name} — projected fees for ${y}`;
+    $("hero-value").textContent = money(proj.value);
+    $("hero-why").textContent = proj.method;
+    $("status-badge").innerHTML = `<span aria-hidden="true">${st.icon}</span> ${esc(st.label)}${target ? ` · ${pct(proj.value / target)} of target` : ""}`;
+
+    const scale = Math.max(target, proj.value, ytd, 1);
+    $("meter-act").style.width = Math.min(100, (ytd / scale) * 100) + "%";
+    $("meter-proj").style.width = Math.min(100, (proj.value / scale) * 100) + "%";
+    $("meter-tgt").style.left = target ? Math.min(100, (target / scale) * 100) + "%" : "100%";
+    $("meter-tgt").style.right = "auto";
+    $("meter-tgt").hidden = !target;
+    const pace = target * yearFraction(y);
+    $("meter-pace").hidden = !(target && isCur);
+    $("meter-pace").style.left = Math.min(100, (pace / scale) * 100) + "%";
+    $("meter-legend").innerHTML =
+      `<span><i style="background:var(--st)"></i>Billed so far ${money(ytd)}</span>` +
+      (y >= curY ? `<span><i style="background:var(--st);opacity:.3"></i>Projected ${money(proj.value)}</span>` : "") +
+      (target && isCur ? `<span><i style="background:var(--ink-2);width:2px"></i>Where you should be today ${money(pace)}</span>` : "") +
+      (target ? `<span><i style="background:var(--ink);width:2px"></i>Target ${money(target)}</span>` : "");
+
+    const remainingMonths = isCur ? 12 - curM : y > curY ? 12 : 0;
+    const needed = target && remainingMonths ? Math.max(0, target - ytd) / remainingMonths : 0;
+    const doneAvg = isCur && proj.done ? sum(cur.slice(0, curM)) / Math.max(1, curM - Math.max(0, cur.findIndex((v) => v > 0))) : sum(cur) / 12;
+    $("hero-facts").innerHTML = [
+      ["Target " + y, target ? money(target) : (who === null ? "Add targets below" : "Not set yet")],
+      ["Billed so far", `${money(ytd)}${target ? ` <span class="note">(${pct(ytd / target)})</span>` : ""}`],
+      [isCur ? "Gap at today's pace" : "Gap to target", target ? (isCur ? signedMoney(ytd - pace) : signedMoney(ytd - target)) : "—"],
+      ["Needed per month to hit target", target && remainingMonths ? money(needed) : "—"],
+      ["Average per month so far", money(doneAvg || 0)],
+      ["Projected vs target", target ? signedMoney(proj.value - target) : "—"],
+    ].map(([k, v]) => `<div><div class="fk">${k}</div><div class="fv">${v}</div></div>`).join("");
+
+    renderKpis(y, cur, ly, curRows, lyRows, isCur, curM);
+    renderMonthChart(y, cur, ly, target, proj);
+    renderCumChart(y, cur, ly, target, proj, isCur, curM);
+    renderDowChart(curRows);
+    renderMixChart(curRows);
+    renderYoY(y, curRows, lyRows, isCur, curM);
+    if (who === null) { renderLeague(y, isCur, curM); renderTargets(y); }
+  }
+  const signedMoney = (n) => `<span class="delta ${n >= 0 ? "up" : "down"}">${n >= 0 ? "+" : "−"}${money(Math.abs(n))}</span>`;
+
+  function renderKpis(y, cur, ly, curRows, lyRows, isCur, curM) {
+    // Month vs month
+    const m = isCur ? curM : 11;
+    const prevVal = m > 0 ? cur[m - 1] : ly[11];
+    const hasMonths = cur.some((v) => v > 0);
+    // Best / worst month (completed months that had billings)
+    const lastDone = isCur ? curM - 1 : 11;
+    const firstIdx = cur.findIndex((v) => v > 0);
+    const done = [];
+    for (let i = Math.max(0, firstIdx); i <= lastDone && firstIdx > -1; i++) done.push([i, cur[i]]);
+    const best = done.length ? done.reduce((a, b) => (b[1] > a[1] ? b : a)) : null;
+    const worst = done.length ? done.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
+    // Same period last year
+    const upto = isCur ? curM : 11;
+    const ytd = sum(cur.slice(0, upto + 1)), lySame = sum(ly.slice(0, upto + 1));
+    // Weekday
+    const dowSums = Array(7).fill(0); curRows.forEach((r) => (dowSums[dow(r.work_date)] += Number(r.fee_share)));
+    const topDow = dowSums.indexOf(Math.max(...dowSums));
+    // Hours / rate
+    const hrsRows = curRows.filter((r) => Number(r.hours_share) > 0);
+    const hrs = sum(hrsRows.map((r) => r.hours_share)), hrsFees = sum(hrsRows.map((r) => r.fee_share));
+    // Recurring & concentration
+    const fees = sum(curRows.map((r) => r.fee_share));
+    const rec = sum(curRows.filter((r) => r.is_recurring).map((r) => r.fee_share));
+    const byClient = {}; curRows.forEach((r) => (byClient[r.client_name] = (byClient[r.client_name] || 0) + Number(r.fee_share)));
+    const topClient = Object.entries(byClient).sort((a, b) => b[1] - a[1])[0];
+    const exp = sum(curRows.map((r) => r.exp_share));
+    const shared = sum(curRows.filter((r) => r.is_split).map((r) => r.fee_share));
+
+    const tile = (k, v, s) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+    $("kpis-1").innerHTML = [
+      (() => {
+        // A month in progress is compared with the previous month at the same point (pro-rated)
+        const today = todaySA(), partial = isCur && m === +today.slice(5, 7) - 1;
+        const frac = partial ? +today.slice(8, 10) / new Date(Date.UTC(y, m + 1, 0)).getUTCDate() : 1;
+        const prevLabel = (m > 0 ? MONTHS[m - 1] : "Dec " + (y - 1)) + (partial ? " at the same point" : "");
+        return tile(`${MONTHS_LONG[m]} ${y}${partial ? " so far" : ""}`, money(cur[m]), deltaHtml(cur[m], prevVal * frac, prevLabel) || "&nbsp;");
+      })(),
+      tile(isCur ? `Year to date vs ${y - 1}` : `${y} vs ${y - 1}`, money(ytd), deltaHtml(ytd, lySame, `same months ${y - 1}`) || "&nbsp;"),
+      tile("Best month", best && best[1] > 0 ? MONTHS_LONG[best[0]] : "—", best && best[1] > 0 ? money(best[1]) : "needs a full month of billings"),
+      tile("Weakest month", worst && done.length > 1 ? MONTHS_LONG[worst[0]] : "—", worst && done.length > 1 ? money(worst[1]) : "needs two full months"),
+    ].join("");
+    $("kpis-2").innerHTML = [
+      tile("Busiest day", hasMonths ? DAYS_LONG[topDow] : "—", hasMonths ? `${pct(dowSums[topDow] / Math.max(1, fees))} of fees` : "&nbsp;"),
+      tile("Top client", topClient ? esc(topClient[0]) : "—", topClient ? `${pct(topClient[1] / Math.max(1, fees))} of fees${topClient[1] / Math.max(1, fees) > 0.4 ? " · high reliance" : ""}` : "&nbsp;"),
+      tile("Recurring work", fees ? pct(rec / fees) : "—", `${money(rec)} from retainers, renewals & subscriptions`),
+      tile("Effective hourly rate", hrs ? money(hrsFees / hrs) : "—", hrs ? `${Math.round(hrs)} hours logged · expenses recovered ${money(exp)}` : `expenses recovered ${money(exp)}`),
+    ].join("") + (shared ? "" : "");
+  }
+
+  // ---- Charts
+  function makeChart(id, config) {
+    if (state.charts[id]) state.charts[id].destroy();
+    state.charts[id] = new Chart($(id), config);
+  }
+  const baseScales = (stacked = false) => ({
+    x: { grid: { display: false }, border: { color: C.grid }, stacked },
+    y: { beginAtZero: true, grid: { color: C.grid, lineWidth: 1 }, border: { display: false }, ticks: { callback: (v) => compact(v), maxTicksLimit: 6 }, stacked },
+  });
+  const tooltipMoney = { callbacks: { label: (c) => ` ${c.dataset.label ? c.dataset.label + ": " : ""}${money(c.parsed.y ?? c.parsed.x)}` } };
+  const legendOpts = { display: true, position: "top", align: "end", labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: "rectRounded", color: C.ink } };
+
+  function renderMonthChart(y, cur, ly, target, proj) {
+    const today = todaySA(), curY = +today.slice(0, 4), curM = +today.slice(5, 7) - 1;
+    const projOnly = cur.map((v, i) => (y === curY && i >= curM ? Math.max(0, proj.monthly[i] - v) : 0));
+    const datasets = [
+      { type: "bar", label: `${y} billed`, data: cur, backgroundColor: C.blue, borderRadius: 4, borderSkipped: "start", maxBarThickness: 24, stack: "a", order: 2 },
+    ];
+    if (y >= curY && sum(projOnly) > 0) datasets.push({ type: "bar", label: "Projected", data: projOnly, backgroundColor: "rgba(32,80,160,.22)", borderRadius: 4, borderSkipped: "start", maxBarThickness: 24, stack: "a", order: 3 });
+    datasets.push({ type: "line", label: `${y - 1}`, data: ly, borderColor: C.ly, backgroundColor: C.ly, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.3, order: 1 });
+    if (target) datasets.push({ type: "line", label: "Monthly target", data: Array(12).fill(target / 12), borderColor: C.ink, borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, order: 0 });
+    $("c-months-sub").textContent = `Fees excl. VAT · ${y} compared with ${y - 1}${target ? " · dashed line = target ÷ 12" : ""}`;
+    makeChart("c-months", {
+      data: { labels: MONTHS, datasets },
+      options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+        plugins: { legend: legendOpts, tooltip: tooltipMoney }, scales: baseScales(true) },
+    });
+  }
+
+  function renderCumChart(y, cur, ly, target, proj, isCur, curM) {
+    let run = 0; const cumAct = cur.map((v, i) => (isCur && i > curM) || y > +todaySA().slice(0, 4) ? null : (run += v));
+    let runP = 0; const cumProj = proj.monthly.map((v, i) => { runP += v; return isCur && i >= curM ? runP : null; });
+    if (isCur && curM > 0) cumProj[curM - 1] = cumAct[curM - 1];
+    let runL = 0; const cumLy = ly.map((v) => (runL += v));
+    const pace = target ? MONTHS.map((_, i) => (target * (i + 1)) / 12) : null;
+    const datasets = [
+      { label: `${y} billed`, data: cumAct, borderColor: C.blue, backgroundColor: C.blueWash, fill: true, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, tension: 0.25 },
+    ];
+    if (isCur) datasets.push({ label: "Projected", data: cumProj, borderColor: C.blue, borderDash: [6, 5], borderWidth: 2, pointRadius: 0, tension: 0.25, spanGaps: true });
+    if (pace) datasets.push({ label: "Target pace", data: pace, borderColor: C.ink, borderWidth: 1.5, pointRadius: 0 });
+    datasets.push({ label: `${y - 1}`, data: cumLy, borderColor: C.lyLight, borderWidth: 2, pointRadius: 0, tension: 0.25 });
+    $("c-cum-sub").textContent = target ? `Running total vs the straight-line path to ${money(target)}` : "Running total for the year (no target set)";
+    makeChart("c-cum", {
+      type: "line", data: { labels: MONTHS, datasets },
+      options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+        plugins: { legend: legendOpts, tooltip: tooltipMoney }, scales: baseScales() },
+    });
+  }
+
+  function renderDowChart(rows) {
+    const fees = Array(7).fill(0), count = Array(7).fill(0);
+    rows.forEach((r) => { const d = dow(r.work_date); fees[d] += Number(r.fee_share); count[d]++; });
+    const total = sum(fees), top = fees.indexOf(Math.max(...fees));
+    $("c-dow-sub").textContent = total ? `Most fees are billed on ${DAYS_LONG[top]}s (${pct(fees[top] / total)})` : "No billings yet this year";
+    makeChart("c-dow", {
+      type: "bar",
+      data: { labels: DAYS, datasets: [{ label: "Fees", data: fees, backgroundColor: fees.map((_, i) => (i === top ? C.blue : "rgba(32,80,160,.45)")), borderRadius: 4, borderSkipped: "start", maxBarThickness: 24 }] },
+      options: { maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${money(c.parsed.y)} · ${count[c.dataIndex]} line${count[c.dataIndex] === 1 ? "" : "s"}` } } },
+        scales: baseScales() },
+    });
+  }
+
+  function renderMixChart(rows) {
+    const key = state.mix, agg = {};
+    rows.forEach((r) => (agg[r[key]] = (agg[r[key]] || 0) + Number(r.fee_share)));
+    let list = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+    const total = sum(list.map((x) => x[1]));
+    if (list.length > 8) { const other = sum(list.slice(7).map((x) => x[1])); list = [...list.slice(0, 7), ["All others", other]]; }
+    const label = { service_area: "service area", client_name: "client", work_type: "type of work" }[key];
+    $("c-mix-sub").textContent = total ? `Main source: ${list[0][0]} (${pct(list[0][1] / total)} of fees) · by ${label}` : "No billings yet this year";
+    makeChart("c-mix", {
+      type: "bar",
+      data: { labels: list.map((x) => x[0]), datasets: [{ label: "Fees", data: list.map((x) => x[1]), backgroundColor: C.blue, borderRadius: 4, borderSkipped: "start", maxBarThickness: 22 }] },
+      options: { indexAxis: "y", maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${money(c.parsed.x)} · ${pct(c.parsed.x / Math.max(1, total))}` } } },
+        scales: { x: { beginAtZero: true, grid: { color: C.grid }, border: { display: false }, ticks: { callback: (v) => compact(v), maxTicksLimit: 5 } },
+                  y: { grid: { display: false }, border: { color: C.grid }, ticks: { color: C.ink, callback: function (v) { const s = this.getLabelForValue(v); return s.length > 22 ? s.slice(0, 21) + "…" : s; } } } } },
+    });
+  }
+  $("mix-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mix]"); if (!b) return;
+    state.mix = b.dataset.mix;
+    document.querySelectorAll("#mix-seg button").forEach((x) => x.classList.toggle("active", x === b));
+    renderMixChart(rowsFor(state.year));
+  });
+
+  function renderYoY(y, curRows, lyRows, isCur, curM) {
+    const upto = isCur ? curM : 11;
+    const inRange = (r) => +r.work_date.slice(5, 7) - 1 <= upto;
+    const stats = (rows) => ({
+      fees: sum(rows.map((r) => r.fee_share)),
+      lines: new Set(rows.map((r) => r.entry_id)).size,
+      hours: sum(rows.map((r) => r.hours_share)),
+      clients: new Set(rows.map((r) => r.client_name)).size,
+      exp: sum(rows.map((r) => r.exp_share)),
+    });
+    const a = stats(curRows.filter(inRange)), b = stats(lyRows.filter(inRange)), full = stats(lyRows);
+    const ch = (x, z) => (z ? `<span class="delta ${x >= z ? "up" : "down"}">${x >= z ? "+" : "−"}${pct(Math.abs(x / z - 1))}</span>` : "—");
+    const period = upto === 11 ? "Full year" : `Jan–${MONTHS[upto]}`;
+    $("yoy-table").innerHTML = `<table class="grid">
+      <thead><tr><th></th><th class="num">${y} (${period})</th><th class="num">${y - 1} (${period})</th><th class="num">Change</th>${upto < 11 ? `<th class="num">${y - 1} full year</th>` : ""}</tr></thead>
+      <tbody>
+        <tr><td>Fees</td><td class="num"><strong>${money(a.fees)}</strong></td><td class="num">${money(b.fees)}</td><td class="num">${ch(a.fees, b.fees)}</td>${upto < 11 ? `<td class="num">${money(full.fees)}</td>` : ""}</tr>
+        <tr><td>Billing lines</td><td class="num">${a.lines}</td><td class="num">${b.lines}</td><td class="num">${ch(a.lines, b.lines)}</td>${upto < 11 ? `<td class="num">${full.lines}</td>` : ""}</tr>
+        <tr><td>Hours logged</td><td class="num">${Math.round(a.hours)}</td><td class="num">${Math.round(b.hours)}</td><td class="num">${ch(a.hours, b.hours)}</td>${upto < 11 ? `<td class="num">${Math.round(full.hours)}</td>` : ""}</tr>
+        <tr><td>Clients billed</td><td class="num">${a.clients}</td><td class="num">${b.clients}</td><td class="num">${ch(a.clients, b.clients)}</td>${upto < 11 ? `<td class="num">${full.clients}</td>` : ""}</tr>
+        <tr><td>Expenses recovered</td><td class="num">${money(a.exp)}</td><td class="num">${money(b.exp)}</td><td class="num">${ch(a.exp, b.exp)}</td>${upto < 11 ? `<td class="num">${money(full.exp)}</td>` : ""}</tr>
+      </tbody></table>`;
+  }
+
+  // ---- Company: league table
+  function renderLeague(y, isCur, curM) {
+    const people = state.people.filter((p) => p.submits_billings || state.rows.some((r) => r.credited_to === p.id) || state.targets.some((t) => t.consultant_id === p.id && t.year === y));
+    const lines = people.map((p) => {
+      const cur = byMonth(rowsFor(y, p.id)), ly = byMonth(rowsFor(y - 1, p.id));
+      const target = targetFor(y, p.id), proj = project(cur, ly, y), st = statusOf(proj.value, target);
+      const ytd = sum(cur), upto = isCur ? curM : 11, lySame = sum(ly.slice(0, upto + 1)), ytdSame = sum(cur.slice(0, upto + 1));
+      return { p, ytd, target, proj: proj.value, st, ratio: target ? proj.value / target : -1, lySame, ytdSame };
+    }).sort((a, b) => b.ratio - a.ratio || b.ytd - a.ytd);
+    if (!lines.length) { $("league").innerHTML = `<div class="empty">No consultants yet.</div>`; return; }
+    const colour = { good: C.good, close: C.close, bad: C.bad, none: C.ly };
+    $("league").innerHTML = `<table class="grid"><thead><tr>
+      <th>Consultant</th><th class="num">Target ${y}</th><th class="num">Billed so far</th><th>Progress</th>
+      <th class="num">Projected</th><th>Status</th><th class="num">vs ${y - 1}</th></tr></thead><tbody>
+      ${lines.map((l) => `<tr class="${l.p.active ? "" : "muted"}">
+        <td><a href="#" class="name-link" data-view="${l.p.id}">${esc(l.p.full_name || l.p.email)}</a></td>
+        <td class="num">${l.target ? money(l.target) : `<span class="note">not set</span>`}</td>
+        <td class="num">${money(l.ytd)}</td>
+        <td class="nowrap">${l.target ? `<span class="mini-meter"><span style="width:${Math.min(100, (l.ytd / l.target) * 100)}%;background:${colour[l.st.key]}"></span></span>${pct(l.ytd / l.target)}` : "—"}</td>
+        <td class="num">${money(l.proj)}</td>
+        <td><span class="dot-st ${l.st.key}"><span aria-hidden="true">${l.st.icon}</span>${esc(l.st.label)}</span></td>
+        <td class="num">${l.lySame ? `<span class="delta ${l.ytdSame >= l.lySame ? "up" : "down"}">${l.ytdSame >= l.lySame ? "+" : "−"}${pct(Math.abs(l.ytdSame / l.lySame - 1))}</span>` : "—"}</td>
+      </tr>`).join("")}</tbody></table>`;
+  }
+  $("league").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-view]"); if (!a) return;
+    e.preventDefault(); setView(a.dataset.view);
+  });
+
+  // ---- Company: targets editor
+  function renderTargets(y) {
+    const people = state.people.filter((p) => (p.active && p.submits_billings) || state.targets.some((t) => t.consultant_id === p.id && t.year === y));
+    const total = targetFor(y, null), lyTotal = sum(state.targets.filter((t) => t.year === y - 1).map((t) => t.target_amount));
+    $("targets-hint").textContent = `Fees excl. VAT for ${y} (January to December). The company target is the total of everyone's targets.${isAdmin() ? " Type an amount and it saves automatically." : ""}`;
+    $("targets-table").innerHTML = `<table class="grid"><thead><tr><th>Consultant</th><th class="num">${y - 1} target</th><th class="num">${y} target</th><th class="num">Per month</th></tr></thead><tbody>
+      ${people.map((p) => {
+        const t = state.targets.find((x) => x.consultant_id === p.id && x.year === y);
+        const lt = state.targets.find((x) => x.consultant_id === p.id && x.year === y - 1);
+        return `<tr><td>${esc(p.full_name || p.email)}</td>
+          <td class="num">${lt ? money(lt.target_amount) : "—"}</td>
+          <td class="num ${isAdmin() ? "cell-in" : ""}">${isAdmin()
+            ? `<input type="number" min="0" step="1000" data-target="${p.id}" value="${t ? Number(t.target_amount) : ""}" placeholder="0" style="width:150px;text-align:right">`
+            : (t ? money(t.target_amount) : "—")}</td>
+          <td class="num">${t ? money(t.target_amount / 12) : "—"}</td></tr>`;
+      }).join("")}
+      </tbody><tfoot><tr><td>Company target</td><td class="num">${lyTotal ? money(lyTotal) : "—"}</td><td class="num">${money(total)}</td><td class="num">${money(total / 12)}</td></tr></tfoot></table>`;
+  }
+  $("targets-table").addEventListener("change", async (e) => {
+    const el = e.target.closest("[data-target]"); if (!el) return;
+    const v = el.value.trim();
+    const res = v === ""
+      ? await sb.from("consultant_targets").delete().eq("consultant_id", el.dataset.target).eq("year", state.year)
+      : await sb.from("consultant_targets").upsert({ consultant_id: el.dataset.target, year: state.year, target_amount: Math.max(0, Number(v)) });
+    if (res.error) return toast(res.error.message, "error");
+    toast("Target saved");
+    const { data } = await sb.from("consultant_targets").select("consultant_id, year, target_amount").in("year", [state.year - 1, state.year]);
+    state.targets = data || []; render();
+  });
+  $("copy-targets").onclick = async () => {
+    const y = state.year;
+    const rows = state.targets.filter((t) => t.year === y - 1 && !state.targets.some((x) => x.year === y && x.consultant_id === t.consultant_id))
+      .map((t) => ({ consultant_id: t.consultant_id, year: y, target_amount: t.target_amount }));
+    if (!rows.length) return toast(`Nothing to copy — no ${y - 1} targets, or everyone already has a ${y} target.`);
+    const { error } = await sb.from("consultant_targets").upsert(rows);
+    if (error) return toast(error.message, "error");
+    toast(`Copied ${rows.length} target${rows.length > 1 ? "s" : ""}`); load();
+  };
+
+  // =====================================================================
+  // Navigation
+  // =====================================================================
+  function setView(v) {
+    state.view = v === state.user.id ? "me" : v;
+    if (leader()) $("view-select").value = v;
+    history.replaceState(null, "", "?view=" + (state.view === "me" ? state.user.id : state.view));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    load();
+  }
+  $("view-select").onchange = (e) => setView(e.target.value);
+  $("prev-year").onclick = () => { state.year--; load(); };
+  $("next-year").onclick = () => { state.year++; load(); };
+  $("incl-drafts").onchange = render;
+  $("logout-btn").onclick = async () => { await sb.auth.signOut(); location.replace("index.html"); };
+  sb.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") location.replace("index.html"); });
+
+  init();
+  </script>
+</body>
+</html>

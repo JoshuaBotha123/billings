@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>My Billings · GBS</title>
+  <link rel="icon" href="assets/gbs-logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="logo" src="assets/gbs-logo.png" alt="Global Business Solutions">
+      <nav class="nav">
+        <a href="my-billings.html" class="active">My billings</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="finance.html" id="finance-link" hidden>Finance &amp; admin</a>
+      </nav>
+      <div class="user-chip">
+        <span><strong id="user-name" style="color:var(--ink)">…</strong> <span class="email" id="user-email"></span></span>
+        <span class="pill" id="user-role">—</span>
+        <button class="alerts-btn" id="alerts-btn" hidden>Alerts <span class="count" id="alerts-count" hidden>0</span></button>
+        <a href="index.html?check=1" id="setup-link" hidden>Setup check</a>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <div class="month-switch">
+        <button class="icon-btn" id="prev-month" aria-label="Previous month">‹</button>
+        <h1 id="month-label">—</h1>
+        <button class="icon-btn" id="next-month" aria-label="Next month">›</button>
+        <button class="btn btn-ghost btn-sm" id="this-month">Today</button>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-ghost" id="export-btn">Export to Excel</button>
+        <button class="btn btn-dark" id="final-btn">Final submit month</button>
+        <button class="btn btn-primary" id="new-btn">+ New entry</button>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+
+    <section class="tiles">
+      <div class="tile"><div class="k">Month total</div><div class="v" id="t-total">—</div><div class="s">excl. VAT · <span id="t-count">0</span> entries</div></div>
+      <div class="tile"><div class="k">Fees</div><div class="v" id="t-fees">—</div><div class="s"><span id="t-hours">0</span> hours logged</div></div>
+      <div class="tile"><div class="k">Expenses</div><div class="v" id="t-exp">—</div><div class="s">travel, car hire, accommodation</div></div>
+      <div class="tile" id="t-next-tile"><div class="k">Next deadline</div><div class="v" id="t-next">—</div><div class="s" id="t-next-s">&nbsp;</div></div>
+    </section>
+
+    <div id="weeks"><div class="empty">Loading…</div></div>
+  </main>
+
+  <!-- Entry form -->
+  <div class="modal-backdrop" id="entry-modal" hidden>
+    <form class="modal" id="entry-form" novalidate>
+      <h2 id="entry-title">New billing entry</h2>
+      <p class="hint" id="entry-note" style="margin:0"></p>
+
+      <div class="grid2">
+        <div>
+          <label for="f-date">Date of work</label>
+          <input id="f-date" type="date" required>
+        </div>
+        <div>
+          <label for="f-client">Client</label>
+          <input id="f-client" list="client-list" autocomplete="off" placeholder="Start typing a client name" required>
+          <datalist id="client-list"></datalist>
+          <div class="hint">New client? Just type the full name — it will be added.</div>
+        </div>
+        <div>
+          <label for="f-area">Service area</label>
+          <select id="f-area" required></select>
+        </div>
+        <div>
+          <label for="f-type">Type of work</label>
+          <select id="f-type" required></select>
+        </div>
+        <div class="span2">
+          <label for="f-contact">Invoice contact</label>
+          <input id="f-contact" placeholder="Who should receive the invoice (name / email)">
+        </div>
+        <div class="span2">
+          <label for="f-narr">Nature of work done</label>
+          <textarea id="f-narr" required placeholder="This text goes on the client's invoice"></textarea>
+        </div>
+      </div>
+
+      <div class="section-label">Fees</div>
+      <div class="grid3">
+        <div>
+          <label for="f-hours">Hours</label>
+          <input id="f-hours" type="number" min="0" step="0.25" inputmode="decimal" placeholder="Optional">
+        </div>
+        <div>
+          <label for="f-rate">Hourly rate (R)</label>
+          <input id="f-rate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Optional">
+        </div>
+        <div>
+          <label for="f-fee">Fee amount (R)</label>
+          <input id="f-fee" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+      <div class="hint">Enter hours and rate to calculate the fee, or type a fixed fee directly.</div>
+
+      <div class="section-label">Expenses to recover</div>
+      <div class="grid3">
+        <div>
+          <label for="f-travel">Travel (R)</label>
+          <input id="f-travel" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div>
+          <label for="f-car">Car hire (R)</label>
+          <input id="f-car" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div>
+          <label for="f-acc">Accommodation (R)</label>
+          <input id="f-acc" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+
+      <label for="f-comments">Comments</label>
+      <textarea id="f-comments" style="min-height:60px" placeholder="Anything finance should know"></textarea>
+
+      <div class="section-label">Shared with colleagues</div>
+      <div id="split-rows"></div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px">
+        <button type="button" class="btn btn-ghost btn-sm" id="split-add">+ Add a colleague</button>
+        <span class="hint" id="split-own" style="margin:0"></span>
+      </div>
+      <div class="hint">Only one person captures a shared billing. Add the colleagues and their % — each person's dashboard counts only their share.</div>
+
+      <div class="total-bar">
+        <div><div class="small">Total excl. VAT</div><div class="big" id="f-total">R 0.00</div></div>
+        <div class="small" id="f-vat">VAT R 0.00 · Incl. VAT R 0.00</div>
+      </div>
+
+      <div class="msg error" id="entry-msg" role="status"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="entry-cancel">Cancel</button>
+        <button type="button" class="btn btn-ghost" id="entry-save-another">Save &amp; add another</button>
+        <button type="submit" class="btn btn-primary" id="entry-save">Save entry</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Alerts (admin / finance / executive) -->
+  <div class="modal-backdrop" id="alerts-modal" hidden>
+    <div class="modal">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 style="margin:0;flex:1">Late &amp; overdue alerts</h2>
+        <button class="btn btn-ghost btn-sm" id="alerts-check">Check now</button>
+        <button class="btn btn-ghost btn-sm" id="alerts-toggle">Show cleared</button>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Checked automatically every day at 17:10. Overdue alerts clear themselves when the person submits.</p>
+      <div id="alerts-list" class="alerts-list"></div>
+      <div class="modal-actions"><button class="btn btn-primary" id="alerts-close">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Confirm dialog -->
+  <div class="modal-backdrop top" id="confirm-modal" hidden>
+    <div class="modal small">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p id="confirm-body"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirm-no">Cancel</button>
+        <button class="btn btn-primary" id="confirm-yes">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  // =====================================================================
+  // GBS Billings — My billings (consultant capture screen, Step 3)
+  // =====================================================================
+  const cfg = window.GBS_CONFIG;
+  const sb  = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  const $   = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const money = (n) => "R " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  // ---- Date helpers (all dates are 'YYYY-MM-DD' strings, handled in UTC so timezones can't shift them)
+  const parseD   = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  const iso      = (d) => d.toISOString().slice(0, 10);
+  const addDays  = (s, n) => { const d = parseD(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+  const isoDow   = (s) => parseD(s).getUTCDay() || 7;                         // 1 = Mon … 7 = Sun
+  const weekEnding = (s) => addDays(s, (5 - isoDow(s) + 7) % 7);             // Friday on/after (matches SQL)
+  const todaySA  = () => iso(new Date(Date.now() + 2 * 3600e3));              // today in SAST (UTC+2)
+  const monthStart = (s) => s.slice(0, 7) + "-01";
+  const monthEnd = (s) => { const d = parseD(monthStart(s)); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return iso(d); };
+  const addMonths = (s, n) => { const d = parseD(monthStart(s)); d.setUTCMonth(d.getUTCMonth() + n); return iso(d); };
+  const fmtDay   = (s) => parseD(s).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const fmtShort = (s) => parseD(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const fmtMonth = (s) => parseD(s).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  const fmtWhen  = (ts) => new Date(ts).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Johannesburg" });
+
+  const state = {
+    user: null, profile: null,
+    month: monthStart(todaySA()),
+    clients: [], areas: [], types: [],
+    entries: [], subs: [],
+    deadlineTime: "17:00", vatRate: 0.15, holidays: new Set(),
+    alerts: [], showResolved: false,
+    editing: null, feeTouched: false,
+  };
+  // Due dates: move to the next working day if they land on a weekend or SA public holiday
+  const nextBusinessDay = (s) => { let d = s; while (isoDow(d) > 5 || state.holidays.has(d)) d = addDays(d, 1); return d; };
+  const weekDue  = (we) => nextBusinessDay(we);                 // Friday (or next working day)
+  const monthDue = (ms) => nextBusinessDay(monthEnd(ms));       // last day of month (or next working day)
+  const at17     = (d) => new Date(`${d}T${state.deadlineTime}:00+02:00`);
+  const deadlineFor   = (we) => at17(weekDue(we));
+  const monthDeadline = (ms) => at17(monthDue(ms));
+
+  // ---- UI helpers
+  let toastTimer;
+  function toast(text, kind = "") {
+    const t = $("toast"); t.textContent = text; t.className = "toast " + kind; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200);
+  }
+  function confirmBox({ title, body, yes = "Confirm", danger = false }) {
+    return new Promise((resolve) => {
+      $("confirm-title").textContent = title;
+      $("confirm-body").innerHTML = body;
+      $("confirm-yes").textContent = yes;
+      $("confirm-yes").className = "btn " + (danger ? "btn-danger" : "btn-primary");
+      $("confirm-modal").hidden = false;
+      const done = (v) => { $("confirm-modal").hidden = true; $("confirm-yes").onclick = $("confirm-no").onclick = null; resolve(v); };
+      $("confirm-yes").onclick = () => done(true);
+      $("confirm-no").onclick  = () => done(false);
+    });
+  }
+  function friendlyError(err) {
+    const m = err?.message || String(err);
+    if (/locked/i.test(m)) return m;
+    if (/JWT|session/i.test(m)) return "Your session has expired. Please sign in again.";
+    return m;
+  }
+
+  // =====================================================================
+  // Loading
+  // =====================================================================
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return location.replace("index.html");
+    state.user = session.user;
+
+    const [p, s, a, t, h] = await Promise.all([
+      sb.from("profiles").select("full_name, role, active").eq("id", state.user.id).single(),
+      sb.from("app_settings").select("key, value"),
+      sb.from("service_areas").select("id, name").eq("active", true).order("sort_order"),
+      sb.from("work_types").select("id, name, is_recurring").eq("active", true).order("sort_order"),
+      sb.from("public_holidays").select("holiday_date"),
+    ]);
+    state.holidays = new Set((h.data || []).map((x) => x.holiday_date));
+    if (p.error) { toast("Could not load your profile: " + p.error.message, "error"); return; }
+    state.profile = p.data;
+    if (!state.profile.active) {
+      document.querySelector(".page").innerHTML = `<div class="banner late">Your account has been deactivated. Please contact an administrator if you think this is a mistake.</div>`;
+      $("user-name").textContent = state.profile.full_name || state.user.email;
+      return;
+    }
+    for (const row of s.data || []) {
+      if (row.key === "deadline_time") state.deadlineTime = row.value;
+      if (row.key === "vat_rate") state.vatRate = Number(row.value) || 0.15;
+    }
+    state.areas = a.data || [];
+    state.types = t.data || [];
+
+    $("user-name").textContent = state.profile.full_name || state.user.email;
+    $("user-email").textContent = state.user.email;
+    $("user-role").textContent = state.profile.role;
+    $("setup-link").hidden = state.profile.role !== "admin";
+    if (["admin", "finance", "executive"].includes(state.profile.role)) { $("alerts-btn").hidden = false; $("finance-link").hidden = false; loadAlerts(); }
+
+    $("f-area").innerHTML = `<option value="">Choose…</option>` + state.areas.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+    $("f-type").innerHTML = `<option value="">Choose…</option>` + state.types.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+
+    await loadClients();
+    const col = await sb.rpc("list_colleagues");
+    state.colleagues = (col.data || []).filter((c) => c.id !== state.user.id);
+    await loadMonth();
+  }
+
+  async function loadClients() {
+    const { data, error } = await sb.from("clients").select("id, name, invoice_contact").eq("active", true).order("name");
+    if (error) return toast("Could not load clients: " + error.message, "error");
+    state.clients = data || [];
+    $("client-list").innerHTML = state.clients.map((c) => `<option value="${esc(c.name)}"></option>`).join("");
+  }
+
+  // The weeks shown for a month: every Sat–Fri week that touches the month
+  function weeksOfMonth(ms) {
+    const weeks = [];
+    for (let we = weekEnding(ms); addDays(we, -6) <= monthEnd(ms); we = addDays(we, 7)) weeks.push(we);
+    return weeks;
+  }
+
+  async function loadMonth() {
+    const ms = state.month;
+    const weeks = weeksOfMonth(ms);
+    const from = addDays(weeks[0], -6), to = weeks[weeks.length - 1];
+    $("month-label").textContent = fmtMonth(ms);
+    $("weeks").innerHTML = `<div class="empty">Loading…</div>`;
+
+    const [e, s] = await Promise.all([
+      sb.from("v_billing_entries").select("*")
+        .eq("consultant_id", state.user.id).gte("work_date", from).lte("work_date", to)
+        .order("work_date").order("id"),
+      sb.from("submissions").select("*")
+        .eq("consultant_id", state.user.id).gte("week_ending", from).lte("week_ending", to),
+    ]);
+    if (e.error) { $("weeks").innerHTML = `<div class="empty">Could not load entries: ${esc(e.error.message)}</div>`; return; }
+    state.entries = e.data || [];
+    state.subs = s.data || [];
+    render();
+  }
+
+  // =====================================================================
+  // Rendering
+  // =====================================================================
+  const monthEntries = () => state.entries.filter((x) => x.work_date.slice(0, 7) === state.month.slice(0, 7));
+  const finalSub = () => state.subs.find((x) => x.is_final && x.period_month === state.month);
+  // A week counts as submitted if it has its own submission, or the month (that the Friday falls in) was final-submitted
+  const weekSub = (we) => state.subs.find((x) => !x.is_final && x.week_ending === we)
+                       || state.subs.find((x) => x.is_final && x.period_month === monthStart(we));
+  const sum = (rows, f) => rows.reduce((a, r) => a + Number(r[f] || 0), 0);
+
+  function render() {
+    const today = todaySA();
+    const now = new Date();
+    const mine = monthEntries();
+    const fin = finalSub();
+
+    // Tiles
+    $("t-total").textContent = money(sum(mine, "total_excl_vat"));
+    $("t-count").textContent = mine.length;
+    $("t-fees").textContent  = money(sum(mine, "fee_amount"));
+    $("t-hours").textContent = round2(sum(mine, "hours"));
+    $("t-exp").textContent   = money(sum(mine, "travel") + sum(mine, "car_hire") + sum(mine, "accommodation"));
+
+    // Next deadline tile: earliest week (up to the current one) that still needs submitting
+    const weeks = weeksOfMonth(state.month);
+    const monthOpen = state.month <= monthStart(today);
+    const changed = monthChanges();                 // entries added/edited since the final submission
+    const monthNeeds = monthOpen && (!fin || changed.length);
+    const items = weeks
+      .filter((we) => addDays(we, -6) <= today && (!weekSub(we) || draftsIn(we).length))
+      .map((we) => ({ label: `Week ending ${fmtDay(we)}`, due: weekDue(we), dl: deadlineFor(we) }));
+    if (monthNeeds) items.push({ label: `Month-end final · ${fmtMonth(state.month)}`, due: monthDue(state.month), dl: monthDeadline(state.month) });
+    items.sort((a, b) => a.dl - b.dl);
+    const tile = $("t-next-tile"); tile.classList.remove("alert");
+    if (items.length) {
+      const it = items[0];
+      if (now > it.dl) { tile.classList.add("alert"); $("t-next").textContent = "Overdue"; $("t-next-s").textContent = `${it.label} was due ${fmtDay(it.due)} ${state.deadlineTime}`; }
+      else { $("t-next").textContent = fmtDay(it.due); $("t-next-s").textContent = `${it.label} · ${timeLeft(it.dl - now)} left`; }
+    } else if (fin) {
+      $("t-next").textContent = "All done"; $("t-next-s").textContent = "Month final-submitted";
+    } else {
+      $("t-next").textContent = "Up to date"; $("t-next-s").textContent = "No weeks waiting";
+    }
+
+    // Banner + final button
+    const dueTxt = `${fmtDay(monthDue(state.month))} ${state.deadlineTime}`;
+    if (fin && changed.length) {
+      $("banner").innerHTML = `<div class="banner warn">You've changed ${changed.length} entr${changed.length > 1 ? "ies" : "y"} since your month-end final submission. Click <strong>Resubmit month</strong> so finance gets the latest figures.${now > monthDeadline(state.month) ? " This will be marked late." : ""}</div>`;
+    } else if (fin) {
+      $("banner").innerHTML = `<div class="banner ${fin.is_late ? "late" : "ok"}">✓ ${fmtMonth(state.month)} was final-submitted on ${fmtWhen(fin.submitted_at)}${fin.is_late ? " (late — due " + dueTxt + ")" : ""}. You can still correct entries until finance invoices them; you'll then need to resubmit the month.</div>`;
+    } else if (monthOpen && now > monthDeadline(state.month)) {
+      $("banner").innerHTML = `<div class="banner late">The month-end final submission for ${fmtMonth(state.month)} was due ${dueTxt}. You can still submit — it will be marked late and admins will be notified.</div>`;
+    } else $("banner").innerHTML = "";
+    $("final-btn").textContent = fin ? (changed.length ? "Resubmit month" : "Final submitted ✓") : "Final submit month";
+    $("final-btn").disabled = !monthNeeds;
+    $("final-btn").title = !monthOpen ? "This month hasn't started yet" : `Due ${dueTxt}`;
+
+    // Weeks
+    const currentWe = weekEnding(today);
+    // Hide a trailing/leading week whose only days in this month are a weekend, unless it has entries
+    const shown = weeks.filter((we) => {
+      const inMonth = [0,1,2,3,4,5,6].map((i) => addDays(we, -i)).filter((d) => monthStart(d) === state.month);
+      return inMonth.some((d) => isoDow(d) <= 5) || state.entries.some((x) => weekEnding(x.work_date) === we && monthStart(x.work_date) === state.month);
+    });
+    $("weeks").innerHTML = shown.map((we) => renderWeek(we, we === currentWe, now, today)).join("");
+  }
+
+  const monthChanges = () => monthEntries().filter((x) => x.status === "draft" || x.status === "submitted");
+  const draftsIn = (we) => state.entries.filter((x) => weekEnding(x.work_date) === we && x.status === "draft");
+
+  function timeLeft(ms) {
+    const h = Math.floor(ms / 3600e3), d = Math.floor(h / 24);
+    if (d >= 1) return `${d} day${d > 1 ? "s" : ""} ${h % 24}h`;
+    const m = Math.floor((ms % 3600e3) / 60e3);
+    return `${h}h ${m}m`;
+  }
+
+  function renderWeek(we, isCurrent, now, today) {
+    const start = addDays(we, -6);
+    const rows = state.entries.filter((x) => weekEnding(x.work_date) === we);
+    const drafts = rows.filter((x) => x.status === "draft");
+    const sub = weekSub(we);
+    const dl = deadlineFor(we);
+    const started = start <= today;
+
+    let pills = "";
+    if (sub) {
+      pills += sub.is_final
+        ? `<span class="pill final">Covered by month-end final</span>`
+        : sub.is_late
+        ? `<span class="pill late">Submitted late · ${esc(fmtWhen(sub.submitted_at))}</span>`
+        : `<span class="pill ok">Submitted · ${esc(fmtWhen(sub.submitted_at))}</span>`;
+      if (drafts.length) pills += ` <span class="pill warn">${drafts.length} new draft${drafts.length > 1 ? "s" : ""} — resubmit</span>`;
+    } else if (!started) {
+      pills = `<span class="pill draft">Upcoming</span>`;
+    } else if (now > dl) {
+      pills = `<span class="pill late">Overdue · was due ${esc(fmtDay(weekDue(we)))} ${state.deadlineTime}</span>`;
+    } else {
+      pills = `<span class="pill">Due ${esc(fmtDay(weekDue(we)))} ${state.deadlineTime}</span>`;
+    }
+
+    const canSubmit = started && (!sub || drafts.length);
+    const btnLabel = sub ? "Resubmit week" : rows.length ? "Submit week" : "Submit nil week";
+    const btn = canSubmit ? `<button class="btn btn-primary btn-sm" data-submit="${we}">${btnLabel}</button>` : "";
+
+    const total = rows.reduce((a, r) => a + Number(r.total_excl_vat || 0), 0);
+    const body = rows.length ? `
+      <div class="table-wrap"><table class="entries">
+        <thead><tr>
+          <th>Date</th><th>Client</th><th>Service / type</th><th>Nature of work</th>
+          <th class="num">Hours</th><th class="num">Fee</th><th class="num">Expenses</th><th class="num">Total excl. VAT</th>
+          <th>Status</th><th></th>
+        </tr></thead>
+        <tbody>${rows.map(renderRow).join("")}</tbody>
+      </table></div>`
+      : `<div class="empty">${started ? "No entries this week yet." : "Nothing captured for this week yet."}</div>`;
+
+    return `
+      <section class="week${isCurrent ? " current" : ""}">
+        <div class="week-head">
+          <h3>Week ending ${esc(fmtDay(we))}</h3>
+          <span class="meta">${esc(fmtShort(start))} – ${esc(fmtShort(we))}${isCurrent ? " · this week" : ""}</span>
+          ${pills}
+          <span class="spacer"></span>
+          <span class="sum">${money(total)}</span>
+          ${btn}
+        </div>
+        ${body}
+      </section>`;
+  }
+
+  function renderRow(r) {
+    const other = r.work_date.slice(0, 7) !== state.month.slice(0, 7);
+    const exp = Number(r.travel) + Number(r.car_hire) + Number(r.accommodation);
+    const editable = ["draft", "submitted", "final"].includes(r.status);   // until finance invoices
+    const actions = editable
+      ? `<button class="link-btn" data-edit="${r.id}">Edit</button>
+         <button class="link-btn" data-copy="${r.id}">Copy</button>
+         <button class="link-btn danger" data-del="${r.id}">Delete</button>`
+      : `<button class="link-btn" data-copy="${r.id}">Copy</button> <span class="locked">🔒</span>`;
+    return `
+      <tr class="${other ? "other-month" : ""}">
+        <td class="nowrap">${esc(fmtDay(r.work_date))}</td>
+        <td>${esc(r.client_name)}${r.invoice_contact ? `<span class="sub2">${esc(r.invoice_contact)}</span>` : ""}</td>
+        <td>${esc(r.service_area)}<span class="sub2">${esc(r.work_type)}</span></td>
+        <td class="narr">${esc(r.narrative)}${r.comments ? `<small>💬 ${esc(r.comments)}</small>` : ""}${(r.splits || []).length ? `<small>🤝 You ${Number(r.owner_share_pct)}% · ${r.splits.map((x) => `${esc(x.name)} ${Number(x.share_pct)}%`).join(" · ")}</small>` : ""}</td>
+        <td class="num">${r.hours != null ? round2(r.hours) : "—"}</td>
+        <td class="num">${money(r.fee_amount)}</td>
+        <td class="num">${exp ? money(exp) : "—"}</td>
+        <td class="num"><strong>${money(r.total_excl_vat)}</strong></td>
+        <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
+        <td class="row-actions">${actions}</td>
+      </tr>`;
+  }
+
+  // =====================================================================
+  // Entry form
+  // =====================================================================
+  const F = ["f-date","f-client","f-contact","f-area","f-type","f-narr","f-hours","f-rate","f-fee","f-travel","f-car","f-acc","f-comments"];
+  const numVal = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+
+  // ---- Split billings
+  function renderSplits() {
+    const opts = (sel) => `<option value="">Choose colleague…</option>` + (state.colleagues || []).map((c) => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.full_name)}</option>`).join("");
+    $("split-rows").innerHTML = state.splits.map((x, i) => `
+      <div class="grid3" style="grid-template-columns:2fr 1fr auto;align-items:end;gap:0 12px" data-split="${i}">
+        <div><label>Colleague</label><select data-split-who>${opts(x.consultant_id)}</select></div>
+        <div><label>Their share %</label><input data-split-pct type="number" min="1" max="99" step="1" value="${x.share_pct || ""}" placeholder="e.g. 30"></div>
+        <div><button type="button" class="link-btn danger" data-split-del="${i}" style="margin-bottom:10px">Remove</button></div>
+      </div>`).join("");
+    updateOwnShare();
+  }
+  function readSplits() {
+    state.splits = [...document.querySelectorAll("[data-split]")].map((row) => ({
+      consultant_id: row.querySelector("[data-split-who]").value,
+      share_pct: Number(row.querySelector("[data-split-pct]").value) || 0,
+    }));
+  }
+  const sumSplits = () => state.splits.reduce((a, x) => a + (Number(x.share_pct) || 0), 0);
+  function updateOwnShare() {
+    const own = 100 - sumSplits();
+    $("split-own").innerHTML = state.splits.length ? `Your share: <strong style="color:${own > 0 ? "var(--ink)" : "var(--danger)"}">${round2(own)}%</strong>` : "Not shared — 100% yours.";
+  }
+  $("split-add").onclick = () => {
+    readSplits();
+    if (!(state.colleagues || []).length) return toast("No colleagues on the system yet.", "error");
+    state.splits.push({ consultant_id: "", share_pct: state.splits.length ? 0 : 50 });
+    renderSplits();
+  };
+  $("split-rows").addEventListener("input", () => { readSplits(); updateOwnShare(); });
+  $("split-rows").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-split-del]"); if (!b) return;
+    readSplits(); state.splits.splice(Number(b.dataset.splitDel), 1); renderSplits();
+  });
+
+  function defaultDate() {
+    const t = todaySA();
+    return t.slice(0, 7) === state.month.slice(0, 7) ? t : state.month;
+  }
+
+  function openEntry(entry = null, { copy = false } = {}) {
+    state.editing = entry && !copy ? entry : null;
+    F.forEach((id) => { $(id).value = ""; $(id).classList.remove("invalid"); });
+    $("entry-msg").textContent = "";
+    $("entry-title").textContent = state.editing ? "Edit entry" : copy ? "Copy entry" : "New billing entry";
+    $("entry-save-another").hidden = !!state.editing;
+    $("entry-note").textContent = state.editing?.status === "final"
+      ? "This month was final-submitted. Saving a change re-opens this entry — remember to click Resubmit month afterwards."
+      : state.editing?.status === "submitted"
+      ? "This entry was already submitted. Your changes will be visible to finance straight away."
+      : copy ? "A copy of the entry — check the date and narrative before saving." : "";
+
+    if (entry) {
+      $("f-date").value     = copy ? defaultDate() : entry.work_date;
+      $("f-client").value   = entry.client_name || "";
+      $("f-contact").value  = entry.invoice_contact || "";
+      $("f-area").value     = entry.service_area_id;
+      $("f-type").value     = entry.work_type_id;
+      $("f-narr").value     = entry.narrative || "";
+      $("f-hours").value    = entry.hours ?? "";
+      $("f-rate").value     = entry.hourly_rate ?? "";
+      $("f-fee").value      = Number(entry.fee_amount) ? entry.fee_amount : "";
+      $("f-travel").value   = Number(entry.travel) ? entry.travel : "";
+      $("f-car").value      = Number(entry.car_hire) ? entry.car_hire : "";
+      $("f-acc").value      = Number(entry.accommodation) ? entry.accommodation : "";
+      $("f-comments").value = entry.comments || "";
+      state.feeTouched = !(entry.hours && entry.hourly_rate && round2(entry.hours * entry.hourly_rate) === round2(entry.fee_amount));
+      state.splits = (entry.splits || []).map((x) => ({ consultant_id: x.consultant_id, share_pct: Number(x.share_pct) }));
+    } else {
+      $("f-date").value = defaultDate();
+      state.feeTouched = false;
+      state.splits = [];
+    }
+    state.splitsOriginal = JSON.stringify(state.editing ? state.splits : []);
+    renderSplits();
+    updateTotal();
+    $("entry-modal").hidden = false;
+    setTimeout(() => $(entry ? "f-narr" : "f-client").focus(), 30);
+  }
+  function closeEntry() { $("entry-modal").hidden = true; state.editing = null; }
+
+  function updateTotal() {
+    const t = round2((numVal("f-fee") || 0) + (numVal("f-travel") || 0) + (numVal("f-car") || 0) + (numVal("f-acc") || 0));
+    const vat = round2(t * state.vatRate);
+    $("f-total").textContent = money(t);
+    $("f-vat").textContent = `VAT ${money(vat)} · Incl. VAT ${money(t + vat)}`;
+  }
+
+  function autoFee() {
+    const h = numVal("f-hours"), r = numVal("f-rate");
+    if (!state.feeTouched && h > 0 && r > 0) $("f-fee").value = round2(h * r).toFixed(2);
+    updateTotal();
+  }
+
+  // Fill invoice contact from the client record when picking a known client
+  $("f-client").addEventListener("change", () => {
+    const c = findClient($("f-client").value);
+    if (c && c.invoice_contact && !$("f-contact").value.trim()) $("f-contact").value = c.invoice_contact;
+  });
+  $("f-hours").addEventListener("input", autoFee);
+  $("f-rate").addEventListener("input", autoFee);
+  $("f-fee").addEventListener("input", () => { state.feeTouched = $("f-fee").value.trim() !== ""; updateTotal(); });
+  ["f-travel","f-car","f-acc"].forEach((id) => $(id).addEventListener("input", updateTotal));
+
+  const norm = (s) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  const findClient = (name) => state.clients.find((c) => norm(c.name) === norm(name || ""));
+
+  async function resolveClientId(name, contact) {
+    const clean = name.trim().replace(/\s+/g, " ");
+    const existing = findClient(clean);
+    if (existing) return existing.id;
+    const ok = await confirmBox({
+      title: "Add a new client?",
+      body: `<strong>${esc(clean)}</strong> isn't on the client list yet. Add it? Please check the spelling — everyone will see this name.`,
+      yes: "Add client",
+    });
+    if (!ok) return null;
+    const { data, error } = await sb.from("clients").insert({ name: clean, invoice_contact: contact || null }).select("id, name, invoice_contact").single();
+    if (error) {
+      if (error.code === "23505") { await loadClients(); return findClient(clean)?.id ?? null; }
+      throw error;
+    }
+    await loadClients();
+    return data.id;
+  }
+
+  function validate() {
+    const req = ["f-date", "f-client", "f-area", "f-type", "f-narr"];
+    let ok = true;
+    req.forEach((id) => { const bad = !$(id).value.trim(); $(id).classList.toggle("invalid", bad); if (bad) ok = false; });
+    if (!ok) return "Please fill in the highlighted fields.";
+    const nums = ["f-hours", "f-rate", "f-fee", "f-travel", "f-car", "f-acc"];
+    for (const id of nums) { const v = numVal(id); if (v != null && (isNaN(v) || v < 0)) { $(id).classList.add("invalid"); return "Amounts can't be negative."; } }
+    const total = (numVal("f-fee") || 0) + (numVal("f-travel") || 0) + (numVal("f-car") || 0) + (numVal("f-acc") || 0);
+    if (total <= 0) { $("f-fee").classList.add("invalid"); return "Enter a fee or at least one expense amount."; }
+    readSplits();
+    if (state.splits.some((x) => !x.consultant_id)) return "Choose a colleague for each shared line, or remove the empty line.";
+    if (state.splits.some((x) => !(x.share_pct > 0))) return "Each colleague's share must be more than 0%.";
+    if (new Set(state.splits.map((x) => x.consultant_id)).size !== state.splits.length) return "Each colleague can only be added once.";
+    if (sumSplits() >= 100) return "Your colleagues' shares add up to 100% or more — you must keep part of it.";
+    return null;
+  }
+
+  async function saveEntry(addAnother) {
+    const problem = validate();
+    if (problem) { $("entry-msg").textContent = problem; return; }
+    $("entry-msg").textContent = "";
+    const buttons = [$("entry-save"), $("entry-save-another")];
+    buttons.forEach((b) => (b.disabled = true));
+    try {
+      const contact = $("f-contact").value.trim();
+      const clientId = await resolveClientId($("f-client").value, contact);
+      if (!clientId) return;
+      const row = {
+        work_date: $("f-date").value,
+        client_id: clientId,
+        invoice_contact: contact || null,
+        service_area_id: Number($("f-area").value),
+        work_type_id: Number($("f-type").value),
+        narrative: $("f-narr").value.trim(),
+        hours: numVal("f-hours"),
+        hourly_rate: numVal("f-rate"),
+        fee_amount: round2(numVal("f-fee") || 0),
+        travel: round2(numVal("f-travel") || 0),
+        car_hire: round2(numVal("f-car") || 0),
+        accommodation: round2(numVal("f-acc") || 0),
+        comments: $("f-comments").value.trim() || null,
+      };
+      const res = state.editing
+        ? await sb.from("billing_entries").update(row).eq("id", state.editing.id).select("id").single()
+        : await sb.from("billing_entries").insert(row).select("id").single();
+      if (res.error) throw res.error;
+      const splitData = state.splits.map((x) => ({ consultant_id: x.consultant_id, share_pct: x.share_pct }));
+      if (JSON.stringify(splitData) !== state.splitsOriginal) {
+        const sp = await sb.rpc("set_entry_splits", { p_entry_id: res.data.id, p_splits: splitData });
+        if (sp.error) {
+          state.editing = { ...(state.editing || {}), ...row, id: res.data.id, status: state.editing?.status || "draft" };
+          await loadMonth();
+          throw new Error("The entry was saved, but the split wasn't: " + sp.error.message);
+        }
+      }
+
+      toast(state.editing ? "Entry updated" : "Entry saved as draft");
+      const savedMonth = monthStart(row.work_date);
+      if (addAnother) {
+        // keep date, client, contact, area, type — clear the rest
+        ["f-narr","f-hours","f-fee","f-travel","f-car","f-acc","f-comments"].forEach((id) => ($(id).value = ""));
+        state.splits = []; state.splitsOriginal = "[]"; renderSplits();
+        state.feeTouched = false; updateTotal(); $("f-narr").focus();
+      } else closeEntry();
+      if (savedMonth !== state.month && !addAnother) state.month = savedMonth;
+      await loadMonth();
+    } catch (err) {
+      $("entry-msg").textContent = friendlyError(err);
+    } finally {
+      buttons.forEach((b) => (b.disabled = false));
+    }
+  }
+
+  $("entry-form").addEventListener("submit", (e) => { e.preventDefault(); saveEntry(false); });
+  $("entry-save-another").addEventListener("click", () => saveEntry(true));
+  $("entry-cancel").addEventListener("click", closeEntry);
+
+  // =====================================================================
+  // Row actions, submissions
+  // =====================================================================
+  const byId = (id) => state.entries.find((x) => String(x.id) === String(id));
+
+  $("weeks").addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.edit) return openEntry(byId(b.dataset.edit));
+    if (b.dataset.copy) return openEntry(byId(b.dataset.copy), { copy: true });
+    if (b.dataset.del)  return deleteEntry(byId(b.dataset.del));
+    if (b.dataset.submit) return submitWeek(b.dataset.submit);
+  });
+
+  async function deleteEntry(r) {
+    let body = `${esc(fmtDay(r.work_date))} · ${esc(r.client_name)} · <strong>${money(r.total_excl_vat)}</strong>. This can't be undone.`;
+    if (r.status !== "draft") body += `<br><br>This entry was already submitted, so finance may have seen it. ${r.status === "final" ? "Resubmit the month afterwards." : ""}`;
+    const ok = await confirmBox({ title: "Delete this entry?", body, yes: "Delete", danger: true });
+    if (!ok) return;
+    const { data, error } = await sb.from("billing_entries").delete().eq("id", r.id).select("id");
+    if (error) return toast(friendlyError(error), "error");
+    if (!data?.length) return toast("This entry can't be deleted — it may already be invoiced.", "error");
+    toast("Entry deleted"); loadMonth();
+  }
+
+  async function submitWeek(we) {
+    const drafts = state.entries.filter((x) => x.status === "draft" && x.work_date <= we);
+    const earlier = drafts.filter((x) => addDays(we, -6) > x.work_date).length;
+    const total = drafts.reduce((a, r) => a + Number(r.total_excl_vat || 0), 0);
+    const late = new Date() > deadlineFor(we);
+    let body = drafts.length
+      ? `<strong>${drafts.length}</strong> draft entr${drafts.length > 1 ? "ies" : "y"} totalling <strong>${money(total)}</strong> will be sent to finance.`
+      : `You have no billings for this week. Submitting tells finance you have nothing to bill.`;
+    if (earlier) body += `<br><br>This includes ${earlier} draft${earlier > 1 ? "s" : ""} from earlier weeks.`;
+    body += `<br><br>You can keep adding and editing entries until month-end.`;
+    if (late && !weekSub(we)) body += `<br><br><span style="color:var(--danger)">The deadline (${esc(fmtDay(weekDue(we)))} ${state.deadlineTime}) has passed, so this will be marked late and admins will be notified.</span>`;
+    const ok = await confirmBox({ title: `Submit week ending ${fmtDay(we)}?`, body, yes: "Submit week" });
+    if (!ok) return;
+    const { error } = await sb.rpc("submit_week", { p_week_ending: we, p_is_final: false });
+    if (error) return toast(friendlyError(error), "error");
+    toast("Week submitted ✓"); loadMonth();
+  }
+
+  $("final-btn").addEventListener("click", async () => {
+    const ms = state.month, mine = monthEntries();
+    const due = monthDue(ms), resub = !!finalSub();
+    const total = mine.reduce((a, r) => a + Number(r.total_excl_vat || 0), 0);
+    const open = weeksOfMonth(ms).filter((we) => addDays(we, -6) <= todaySA() && !weekSub(we)).length;
+    let body = `All <strong>${mine.length}</strong> entries for ${fmtMonth(ms)} (<strong>${money(total)}</strong> excl. VAT) will be sent to finance as your final billing for the month. This replaces any weekly figures.`;
+    if (open) body += `<br><br>${open} week${open > 1 ? "s haven't been submitted yet — they'll" : " hasn't been submitted yet — it'll"} be included.`;
+    body += `<br><br>You can still correct entries until finance invoices them, but you'll need to resubmit.`;
+    if (new Date() > monthDeadline(ms)) body += `<br><br><span style="color:var(--danger)">The month-end deadline (${esc(fmtDay(due))} ${state.deadlineTime}) has passed, so this will be marked late and admins will be notified.</span>`;
+    const ok = await confirmBox({ title: `${resub ? "Resubmit" : "Final submit"} ${fmtMonth(ms)}?`, body, yes: resub ? "Resubmit month" : "Final submit month" });
+    if (!ok) return;
+    const { error } = await sb.rpc("submit_month", { p_month: ms });
+    if (error) return toast(friendlyError(error), "error");
+    toast(`${fmtMonth(ms)} final-submitted ✓`); loadMonth();
+  });
+
+  // =====================================================================
+  // Export
+  // =====================================================================
+  $("export-btn").addEventListener("click", () => {
+    const rows = monthEntries();
+    if (!rows.length) return toast("No entries this month to export.");
+    const data = rows.map((r) => ({
+      "Date": r.work_date,
+      "Consultant": r.consultant_name,
+      "Client": r.client_name,
+      "Invoice contact": r.invoice_contact || "",
+      "Service area": r.service_area,
+      "Type of work": r.work_type,
+      "Nature of work done": r.narrative,
+      "Hours": r.hours != null ? Number(r.hours) : "",
+      "Hourly rate": r.hourly_rate != null ? Number(r.hourly_rate) : "",
+      "Fee": Number(r.fee_amount),
+      "Travel": Number(r.travel),
+      "Car hire": Number(r.car_hire),
+      "Accommodation": Number(r.accommodation),
+      "Total excl. VAT": Number(r.total_excl_vat),
+      "VAT": Number(r.vat_amount),
+      "Total incl. VAT": round2(Number(r.total_excl_vat) + Number(r.vat_amount)),
+      "Comments": r.comments || "",
+      "Split": (r.splits || []).length ? `You ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
+      "Status": r.status,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [10, 18, 24, 22, 16, 22, 50, 7, 10, 12, 10, 10, 13, 14, 11, 14, 30, 28, 10].map((w) => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, fmtMonth(state.month).slice(0, 31));
+    const who = (state.profile.full_name || "me").replace(/[^\w]+/g, "_");
+    XLSX.writeFile(wb, `GBS_Billings_${who}_${state.month.slice(0, 7)}.xlsx`);
+  });
+
+  // =====================================================================
+  // Alerts (late / overdue) for admin, finance, executive
+  // =====================================================================
+  const ALERT_LABEL = { overdue_week: "Overdue week", overdue_month: "Overdue month-end", late_week: "Late week", late_month: "Late month-end", new_user: "New account" };
+  const canResolve = () => ["admin", "finance"].includes(state.profile?.role);
+
+  async function loadAlerts() {
+    let q = sb.from("notifications").select("*, profiles!notifications_consultant_id_fkey(full_name, email)").order("created_at", { ascending: false }).limit(200);
+    if (!state.showResolved) q = q.is("resolved_at", null);
+    const { data, error } = await q;
+    if (error) { $("alerts-list").innerHTML = `<div class="empty">Could not load alerts: ${esc(error.message)}</div>`; return; }
+    state.alerts = data || [];
+    const open = state.alerts.filter((a) => !a.resolved_at).length;
+    $("alerts-count").textContent = open; $("alerts-count").hidden = !open;
+    renderAlerts();
+  }
+
+  function renderAlerts() {
+    if (!state.alerts.length) { $("alerts-list").innerHTML = `<div class="empty">No ${state.showResolved ? "" : "open "}alerts — everyone is up to date.</div>`; return; }
+    $("alerts-list").innerHTML = state.alerts.map((a) => `
+      <div class="alert-item${a.resolved_at ? " done" : ""}">
+        <span class="pill ${a.kind.startsWith("overdue") ? "late" : a.kind === "new_user" ? "" : "warn"}">${ALERT_LABEL[a.kind] || a.kind}</span>
+        <div class="alert-text">
+          <div>${esc(a.message)}</div>
+          <div class="hint">${esc(fmtWhen(a.created_at))}${a.resolved_at ? " · cleared " + esc(fmtWhen(a.resolved_at)) : ""}${a.profiles?.email ? ` · <a href="mailto:${esc(a.profiles.email)}?subject=${encodeURIComponent("GBS billings outstanding")}">Email ${esc(a.profiles.full_name || a.profiles.email)}</a>` : ""}</div>
+        </div>
+        ${!a.resolved_at && canResolve() ? `<button class="link-btn" data-resolve="${a.id}">Mark done</button>` : ""}
+      </div>`).join("");
+  }
+
+  $("alerts-btn").onclick = () => { $("alerts-modal").hidden = false; loadAlerts(); };
+  $("alerts-close").onclick = () => ($("alerts-modal").hidden = true);
+  $("alerts-toggle").onclick = () => { state.showResolved = !state.showResolved; $("alerts-toggle").textContent = state.showResolved ? "Hide cleared" : "Show cleared"; loadAlerts(); };
+  $("alerts-check").onclick = async () => {
+    const { data, error } = await sb.rpc("check_overdue");
+    if (error) return toast(friendlyError(error), "error");
+    toast(data ? `${data} new alert${data > 1 ? "s" : ""}` : "No new alerts"); loadAlerts();
+  };
+  $("alerts-list").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-resolve]"); if (!b) return;
+    const { error } = await sb.from("notifications").update({ resolved_at: new Date().toISOString(), resolved_by: state.user.id }).eq("id", b.dataset.resolve);
+    if (error) return toast(friendlyError(error), "error");
+    loadAlerts();
+  });
+
+  // =====================================================================
+  // Navigation + session
+  // =====================================================================
+  $("prev-month").onclick = () => { state.month = addMonths(state.month, -1); loadMonth(); };
+  $("next-month").onclick = () => { state.month = addMonths(state.month, 1); loadMonth(); };
+  $("this-month").onclick = () => { state.month = monthStart(todaySA()); loadMonth(); };
+  $("new-btn").onclick = () => openEntry();
+  $("logout-btn").onclick = async () => { await sb.auth.signOut(); location.replace("index.html"); };
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("confirm-modal").hidden) return $("confirm-no").click();
+    if (!$("entry-modal").hidden) closeEntry();
+    if (!$("alerts-modal").hidden) $("alerts-modal").hidden = true;
+  });
+  sb.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") location.replace("index.html"); });
+
+  init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Finance &amp; Admin · GBS</title>
+  <link rel="icon" href="assets/gbs-logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="logo" src="assets/gbs-logo.png" alt="Global Business Solutions">
+      <nav class="nav">
+        <a href="my-billings.html">My billings</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="finance.html" class="active">Finance &amp; admin</a>
+      </nav>
+      <div class="user-chip">
+        <span><strong id="user-name" style="color:var(--ink)">…</strong> <span class="email" id="user-email"></span></span>
+        <span class="pill" id="user-role">—</span>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <div class="month-switch">
+        <button class="icon-btn" id="prev-month" aria-label="Previous month">‹</button>
+        <h1 id="month-label">—</h1>
+        <button class="icon-btn" id="next-month" aria-label="Next month">›</button>
+        <button class="btn btn-ghost btn-sm" id="this-month">Today</button>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-ghost" id="export-btn">Export to Excel</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button data-tab="subs" class="active">Submissions</button>
+      <button data-tab="inv">Invoicing</button>
+      <button data-tab="alerts">Alerts <span class="count" id="tab-alert-count" hidden>0</span></button>
+      <button data-tab="people">People</button>
+      <button data-tab="lists">Lists</button>
+      <button data-tab="settings" id="tab-settings-btn" hidden>Settings</button>
+    </div>
+
+    <!-- ============ Submissions tracker ============ -->
+    <section id="tab-subs">
+      <section class="tiles">
+        <div class="tile"><div class="k">Billed this month</div><div class="v" id="s-total">—</div><div class="s" id="s-total-s">excl. VAT</div></div>
+        <div class="tile"><div class="k">To invoice</div><div class="v" id="s-toinv">—</div><div class="s">submitted, not yet invoiced</div></div>
+        <div class="tile"><div class="k">Invoiced, unpaid</div><div class="v" id="s-inv">—</div><div class="s" id="s-paid">paid R 0.00</div></div>
+        <div class="tile" id="s-missing-tile"><div class="k">Missing submissions</div><div class="v" id="s-missing">—</div><div class="s" id="s-missing-s">&nbsp;</div></div>
+      </section>
+      <div class="panel-card">
+        <h3>Who has submitted <span class="spacer"></span>
+          <span class="meta" style="font-size:12px;font-weight:400;color:var(--muted)">
+            <span class="st ok">✓</span> on time &nbsp; <span class="st late">Late</span> submitted late &nbsp;
+            <span class="st missing">Missing</span> overdue &nbsp; <span class="st due">Due</span> not due yet &nbsp; <span class="st warn">Changed</span> edited after final
+          </span>
+        </h3>
+        <div class="table-wrap" id="tracker"><div class="empty">Loading…</div></div>
+      </div>
+    </section>
+
+    <!-- ============ Invoicing ============ -->
+    <section id="tab-inv" hidden>
+      <div class="filters">
+        <select id="f-period">
+          <option value="month">This month</option>
+          <option value="open">All months — not yet paid</option>
+        </select>
+        <select id="f-status">
+          <option value="toinv">To invoice (submitted / final)</option>
+          <option value="final">Final only</option>
+          <option value="invoiced">Invoiced, unpaid</option>
+          <option value="paid">Paid</option>
+          <option value="draft">Drafts (not submitted)</option>
+          <option value="all">All statuses</option>
+        </select>
+        <select id="f-consultant"><option value="">All consultants</option></select>
+        <select id="f-client"><option value="">All clients</option></select>
+        <input type="search" id="f-search" placeholder="Search narrative, invoice no…">
+      </div>
+      <div class="panel-card">
+        <div class="table-wrap" id="inv-table"><div class="empty">Loading…</div></div>
+      </div>
+      <div class="action-bar" id="action-bar" hidden>
+        <span><strong id="sel-count">0</strong> lines · <strong id="sel-excl">R 0.00</strong> excl. VAT · <span id="sel-incl">R 0.00</span> incl. VAT</span>
+        <span class="spacer"></span>
+        <button class="btn btn-primary btn-sm" id="act-invoice">Mark invoiced</button>
+        <button class="btn btn-ghost btn-sm" id="act-paid">Mark paid</button>
+        <button class="btn btn-ghost btn-sm" id="act-undo">Undo invoice</button>
+        <button class="btn btn-ghost btn-sm" id="act-clear">Clear</button>
+      </div>
+    </section>
+
+    <!-- ============ Alerts ============ -->
+    <section id="tab-alerts" hidden>
+      <div class="panel-card">
+        <h3>Late, overdue &amp; new-account alerts <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm fin-only" id="alerts-check">Check now</button>
+          <button class="btn btn-ghost btn-sm admin-only" id="alerts-email">Email new alerts now</button>
+          <button class="btn btn-ghost btn-sm" id="alerts-toggle">Show cleared</button>
+        </h3>
+        <div class="panel-body" style="padding-top:4px">
+          <p class="hint">Checked every day at 17:10. New alerts are emailed to the alert list every 10 minutes. Overdue alerts clear themselves when the person submits.</p>
+          <div id="alerts-list" class="alerts-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ People ============ -->
+    <section id="tab-people" hidden>
+      <p class="read-only-note" id="people-note"></p>
+      <div class="panel-card">
+        <div class="table-wrap" id="people-table"><div class="empty">Loading…</div></div>
+      </div>
+      <p class="hint">New people create their own account on the sign-in page with their @globalbusiness.co.za email (they confirm it by email) and start as <strong>Consultant</strong>. Untick <strong>Submits billings</strong> for people who don't bill (they won't be chased). Untick <strong>Active</strong> when someone leaves — they lose access straight away.</p>
+    </section>
+
+    <!-- ============ Lists ============ -->
+    <section id="tab-lists" hidden>
+      <div class="panel-card">
+        <h3>Clients <span class="spacer"></span><span class="hint" id="clients-note" style="margin:0;font-weight:400"></span></h3>
+        <div class="panel-body fin-only" style="padding-bottom:0">
+          <div class="filters" style="margin-bottom:12px">
+            <input id="nc-name" placeholder="New client name">
+            <input id="nc-contact" placeholder="Invoice contact (optional)">
+            <input id="nc-email" type="email" placeholder="Contact email (optional)">
+            <button class="btn btn-primary btn-sm" id="nc-add">Add client</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="clients-table"></div>
+      </div>
+      <div class="panel-card">
+        <h3>Service areas</h3>
+        <div class="panel-body admin-only" style="padding-bottom:0">
+          <div class="filters" style="margin-bottom:12px">
+            <input id="na-name" placeholder="New service area">
+            <input id="na-sort" type="number" placeholder="Order (e.g. 70)" style="min-width:120px">
+            <button class="btn btn-primary btn-sm" id="na-add">Add</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="areas-table"></div>
+      </div>
+      <div class="panel-card">
+        <h3>Types of work</h3>
+        <div class="panel-body admin-only" style="padding-bottom:0">
+          <div class="filters" style="margin-bottom:12px">
+            <input id="nt-name" placeholder="New type of work">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" id="nt-rec" style="width:auto"> Recurring</label>
+            <input id="nt-sort" type="number" placeholder="Order (e.g. 120)" style="min-width:120px">
+            <button class="btn btn-primary btn-sm" id="nt-add">Add</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="types-table"></div>
+      </div>
+    </section>
+
+    <!-- ============ Settings (admin) ============ -->
+    <section id="tab-settings" hidden>
+      <div class="panel-card">
+        <h3>Alert emails</h3>
+        <div class="panel-body">
+          <div class="status-line" id="email-status"><span class="dot"></span>Checking…</div>
+          <div class="settings-grid">
+            <div>
+              <label for="set-alert-emails">Send alerts to</label>
+              <input id="set-alert-emails" placeholder="joshua@globalbusiness.co.za, finance@globalbusiness.co.za">
+              <div class="hint">Separate addresses with commas.</div>
+            </div>
+            <div>
+              <label for="set-alert-from">Sent from</label>
+              <input id="set-alert-from" placeholder="GBS Billings <billings@globalbusiness.co.za>">
+              <div class="hint">Keep <code>onboarding@resend.dev</code> until globalbusiness.co.za is verified in Resend.</div>
+            </div>
+            <div>
+              <label for="set-app-url">App web address</label>
+              <input id="set-app-url" placeholder="https://… (after it's hosted)">
+              <div class="hint">Adds an "Open GBS Billings" link to emails.</div>
+            </div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:22px">
+              <button class="btn btn-primary" id="set-save">Save settings</button>
+            </div>
+          </div>
+          <div class="settings-grid" style="margin-top:8px">
+            <div>
+              <label for="set-key">Resend API key</label>
+              <input id="set-key" type="password" placeholder="re_…" autocomplete="off">
+              <div class="hint">Stored encrypted in Supabase Vault. It is never shown again.</div>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;padding-bottom:22px">
+              <button class="btn btn-ghost" id="set-key-save">Save key</button>
+              <button class="btn btn-ghost" id="set-test">Send test email</button>
+            </div>
+          </div>
+          <div id="email-recent"></div>
+        </div>
+      </div>
+      <div class="panel-card">
+        <h3>Public holidays <span class="spacer"></span><span class="hint" style="margin:0;font-weight:400">Deadlines move to the next working day when they land on one of these</span></h3>
+        <div class="panel-body" style="padding-bottom:0">
+          <div class="filters" style="margin-bottom:12px">
+            <input id="nh-date" type="date" style="min-width:160px">
+            <input id="nh-name" placeholder="Holiday name">
+            <button class="btn btn-primary btn-sm" id="nh-add">Add holiday</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="holidays-table"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Invoice / paid dialog -->
+  <div class="modal-backdrop" id="inv-modal" hidden>
+    <form class="modal small" id="inv-form" novalidate>
+      <h2 id="inv-title">Mark as invoiced</h2>
+      <p id="inv-body"></p>
+      <div id="inv-no-wrap">
+        <label for="inv-no">Invoice number</label>
+        <input id="inv-no" placeholder="As on your accounting system, e.g. INV-01234" autocomplete="off">
+      </div>
+      <label for="inv-date" id="inv-date-label">Invoice date</label>
+      <input id="inv-date" type="date">
+      <div class="msg error" id="inv-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="inv-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="inv-save">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Confirm dialog -->
+  <div class="modal-backdrop top" id="confirm-modal" hidden>
+    <div class="modal small">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p id="confirm-body"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirm-no">Cancel</button>
+        <button class="btn btn-primary" id="confirm-yes">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  // =====================================================================
+  // GBS Billings — Finance & admin (Step 4)
+  // =====================================================================
+  const cfg = window.GBS_CONFIG;
+  const sb  = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  const $   = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const money = (n) => "R " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const num = (v) => Number(v || 0);
+
+  // ---- Dates ('YYYY-MM-DD' strings handled in UTC)
+  const parseD   = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  const iso      = (d) => d.toISOString().slice(0, 10);
+  const addDays  = (s, n) => { const d = parseD(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+  const isoDow   = (s) => parseD(s).getUTCDay() || 7;
+  const weekEnding = (s) => addDays(s, (5 - isoDow(s) + 7) % 7);
+  const todaySA  = () => iso(new Date(Date.now() + 2 * 3600e3));
+  const monthStart = (s) => s.slice(0, 7) + "-01";
+  const monthEnd = (s) => { const d = parseD(monthStart(s)); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return iso(d); };
+  const addMonths = (s, n) => { const d = parseD(monthStart(s)); d.setUTCMonth(d.getUTCMonth() + n); return iso(d); };
+  const fmtDay   = (s) => parseD(s).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const fmtShort = (s) => parseD(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const fmtMonth = (s) => parseD(s).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  const fmtWhen  = (ts) => ts ? new Date(ts).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Johannesburg" }) : "";
+  const fmtDate  = (ts) => ts ? new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Johannesburg" }) : "";
+
+  const state = {
+    user: null, profile: null, role: "",
+    month: monthStart(todaySA()),
+    tab: "subs",
+    people: [], entries: [], subs: [], openRows: null,
+    clients: [], areas: [], types: [], holidays: [], settings: {},
+    alerts: [], showResolved: false,
+    selected: new Set(),
+    deadlineTime: "17:00", vatRate: 0.15, holidaySet: new Set(),
+    invMode: null,
+  };
+  const isAdmin = () => state.role === "admin";
+  const isFin   = () => state.role === "admin" || state.role === "finance";
+
+  // ---- Deadlines (same rules as the database)
+  const nextBusinessDay = (s) => { let d = s; while (isoDow(d) > 5 || state.holidaySet.has(d)) d = addDays(d, 1); return d; };
+  const weekDue  = (we) => nextBusinessDay(we);
+  const monthDue = (ms) => nextBusinessDay(monthEnd(ms));
+  const at17     = (d) => new Date(`${d}T${state.deadlineTime}:00+02:00`);
+  const deadlineFor   = (we) => at17(weekDue(we));
+  const monthDeadline = (ms) => at17(monthDue(ms));
+  function weeksOfMonth(ms) {
+    const weeks = [];
+    for (let we = weekEnding(ms); addDays(we, -6) <= monthEnd(ms); we = addDays(we, 7)) {
+      const inMonth = [0,1,2,3,4,5,6].map((i) => addDays(we, -i)).filter((d) => monthStart(d) === ms);
+      if (inMonth.some((d) => isoDow(d) <= 5)) weeks.push(we);
+    }
+    return weeks;
+  }
+
+  // ---- UI helpers
+  let toastTimer;
+  function toast(text, kind = "") {
+    const t = $("toast"); t.textContent = text; t.className = "toast " + kind; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3500);
+  }
+  function confirmBox({ title, body, yes = "Confirm", danger = false }) {
+    return new Promise((resolve) => {
+      $("confirm-title").textContent = title; $("confirm-body").innerHTML = body;
+      $("confirm-yes").textContent = yes; $("confirm-yes").className = "btn " + (danger ? "btn-danger" : "btn-primary");
+      $("confirm-modal").hidden = false;
+      const done = (v) => { $("confirm-modal").hidden = true; $("confirm-yes").onclick = $("confirm-no").onclick = null; resolve(v); };
+      $("confirm-yes").onclick = () => done(true); $("confirm-no").onclick = () => done(false);
+    });
+  }
+  const errText = (e) => e?.message || String(e);
+
+  // =====================================================================
+  // Loading
+  // =====================================================================
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return location.replace("index.html");
+    state.user = session.user;
+    const { data: profile } = await sb.from("profiles").select("full_name, role, active").eq("id", state.user.id).single();
+    if (!profile || !profile.active || !["admin", "finance", "executive"].includes(profile.role)) return location.replace("my-billings.html");
+    state.profile = profile; state.role = profile.role;
+
+    $("user-name").textContent = profile.full_name || state.user.email;
+    $("user-email").textContent = state.user.email;
+    $("user-role").textContent = profile.role;
+    $("tab-settings-btn").hidden = !isAdmin();
+    document.querySelectorAll(".admin-only").forEach((el) => (el.hidden = !isAdmin()));
+    document.querySelectorAll(".fin-only").forEach((el) => (el.hidden = !isFin()));
+    $("people-note").textContent = isAdmin() ? "" : "Only admins can change people's roles and access.";
+    $("clients-note").textContent = isFin() ? "Edit a cell and it saves automatically" : "Read only";
+
+    await Promise.all([loadSettings(), loadLookups(), loadPeople(), loadAlerts()]);
+    const fromHash = location.hash.slice(1);
+    if (fromHash && document.querySelector(`#tabs [data-tab="${fromHash}"]:not([hidden])`)) state.tab = fromHash;
+    await loadMonth();
+    showTab(state.tab);
+  }
+
+  async function loadSettings() {
+    const [s, h] = await Promise.all([
+      sb.from("app_settings").select("key, value"),
+      sb.from("public_holidays").select("holiday_date, name").order("holiday_date"),
+    ]);
+    state.settings = Object.fromEntries((s.data || []).map((r) => [r.key, r.value]));
+    state.deadlineTime = state.settings.deadline_time || "17:00";
+    state.vatRate = Number(state.settings.vat_rate) || 0.15;
+    state.holidays = h.data || [];
+    state.holidaySet = new Set(state.holidays.map((x) => x.holiday_date));
+  }
+
+  async function loadLookups() {
+    const [c, a, t] = await Promise.all([
+      sb.from("clients").select("id, name, invoice_contact, contact_email, active").order("name"),
+      sb.from("service_areas").select("id, name, sort_order, active").order("sort_order"),
+      sb.from("work_types").select("id, name, is_recurring, sort_order, active").order("sort_order"),
+    ]);
+    state.clients = c.data || []; state.areas = a.data || []; state.types = t.data || [];
+  }
+
+  async function loadPeople() {
+    const { data, error } = await sb.rpc("admin_list_users");
+    if (error) { toast("Could not load people: " + errText(error), "error"); return; }
+    state.people = data || [];
+  }
+
+  async function loadMonth() {
+    const ms = state.month;
+    $("month-label").textContent = fmtMonth(ms);
+    const weeks = weeksOfMonth(ms);
+    const from = addDays(weekEnding(ms), -6) < ms ? addDays(weekEnding(ms), -6) : ms;
+    const to = [monthEnd(ms), weeks[weeks.length - 1] || monthEnd(ms)].sort().pop();
+    const [e, s] = await Promise.all([
+      sb.from("v_billing_entries").select("*").gte("work_date", from).lte("work_date", to).order("work_date").limit(5000),
+      sb.from("submissions").select("*").gte("week_ending", from).lte("week_ending", to),
+    ]);
+    if (e.error) { toast("Could not load billings: " + errText(e.error), "error"); return; }
+    state.entries = e.data || []; state.subs = s.data || [];
+    state.openRows = null;
+    state.selected.clear();
+    renderAll();
+  }
+
+  async function loadOpenRows() {
+    const { data, error } = await sb.from("v_billing_entries").select("*")
+      .in("status", ["draft", "submitted", "final", "invoiced"]).order("work_date").limit(5000);
+    if (error) { toast("Could not load billings: " + errText(error), "error"); return; }
+    state.openRows = data || [];
+  }
+
+  function renderAll() {
+    renderTracker(); renderInvoicing(); renderAlerts(); renderPeople(); renderLists(); renderSettings();
+  }
+
+  // =====================================================================
+  // Tabs
+  // =====================================================================
+  function showTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    ["subs", "inv", "alerts", "people", "lists", "settings"].forEach((t) => ($("tab-" + t).hidden = t !== tab));
+    $("export-btn").hidden = !["subs", "inv"].includes(tab);
+    history.replaceState(null, "", "#" + tab);
+    if (tab === "settings") loadEmailStatus();
+  }
+  $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
+
+  // =====================================================================
+  // Submissions tracker
+  // =====================================================================
+  const monthRows = () => state.entries.filter((x) => monthStart(x.work_date) === state.month);
+  const billers = () => state.people.filter((p) => p.active && p.submits_billings);
+
+  function weekCell(p, we, now, today) {
+    if (addDays(we, -6) > today) return `<span class="st na">—</span>`;
+    if (!p.email_confirmed_at || new Date(p.created_at) > deadlineFor(we)) return `<span class="st na" title="Not on the system yet">n/a</span>`;
+    const sub = state.subs.find((s) => s.consultant_id === p.id && !s.is_final && s.week_ending === we);
+    const fin = state.subs.find((s) => s.consultant_id === p.id && s.is_final && s.period_month === monthStart(we));
+    if (sub) return sub.is_late
+      ? `<span class="st late" title="Submitted ${esc(fmtWhen(sub.submitted_at))}">Late</span>`
+      : `<span class="st ok" title="Submitted ${esc(fmtWhen(sub.submitted_at))}">✓</span>`;
+    if (fin) return `<span class="st ok" title="Covered by month-end final">Final</span>`;
+    if (now > deadlineFor(we)) return `<span class="st missing">Missing</span>`;
+    return `<span class="st due">Due</span>`;
+  }
+
+  function monthCell(p, now, today) {
+    const ms = state.month;
+    if (ms > monthStart(today)) return `<span class="st na">—</span>`;
+    if (!p.email_confirmed_at || new Date(p.created_at) > monthDeadline(ms)) return `<span class="st na">n/a</span>`;
+    const fin = state.subs.find((s) => s.consultant_id === p.id && s.is_final && s.period_month === ms);
+    if (fin) {
+      const changed = monthRows().some((x) => x.consultant_id === p.id && (x.status === "draft" || x.status === "submitted"));
+      if (changed) return `<span class="st warn" title="Final submitted ${esc(fmtWhen(fin.submitted_at))}, then edited">Changed</span>`;
+      return fin.is_late
+        ? `<span class="st late" title="Submitted ${esc(fmtWhen(fin.submitted_at))}">Late ✓</span>`
+        : `<span class="st ok" title="Submitted ${esc(fmtWhen(fin.submitted_at))}">✓ ${esc(fmtShort(fin.submitted_at.slice(0, 10)))}</span>`;
+    }
+    if (now > monthDeadline(ms)) return `<span class="st missing">Missing</span>`;
+    return `<span class="st due">Due ${esc(fmtShort(monthDue(ms)))}</span>`;
+  }
+
+  function renderTracker() {
+    const now = new Date(), today = todaySA();
+    const rows = monthRows();
+    const sumBy = (arr, f) => arr.reduce((a, r) => a + num(r[f]), 0);
+    $("s-total").textContent = money(sumBy(rows, "total_excl_vat"));
+    $("s-total-s").textContent = `excl. VAT · ${rows.length} entries`;
+    $("s-toinv").textContent = money(sumBy(rows.filter((r) => r.status === "submitted" || r.status === "final"), "total_excl_vat"));
+    $("s-inv").textContent = money(sumBy(rows.filter((r) => r.status === "invoiced"), "total_excl_vat"));
+    $("s-paid").textContent = "paid " + money(sumBy(rows.filter((r) => r.status === "paid"), "total_excl_vat"));
+
+    const weeks = weeksOfMonth(state.month);
+    const people = billers();
+    let missing = 0;
+    const body = people.map((p) => {
+      const cells = weeks.map((we) => weekCell(p, we, now, today));
+      const mcell = monthCell(p, now, today);
+      missing += [...cells, mcell].filter((c) => c.includes("st missing")).length;
+      const mine = rows.filter((r) => r.consultant_id === p.id);
+      return `<tr>
+        <td><a href="#" class="name-link" data-person="${p.id}">${esc(p.full_name || p.email)}</a>
+            ${p.email_confirmed_at ? "" : `<span class="sub2">email not confirmed</span>`}</td>
+        ${cells.map((c) => `<td>${c}</td>`).join("")}
+        <td>${mcell}</td>
+        <td class="num">${mine.length}</td>
+        <td class="num">${money(sumBy(mine, "total_excl_vat"))}</td>
+      </tr>`;
+    }).join("");
+    $("s-missing").textContent = missing;
+    $("s-missing-tile").classList.toggle("alert", missing > 0);
+    $("s-missing-s").textContent = missing ? "click a name to see their billings" : "everyone is up to date";
+
+    $("tracker").innerHTML = people.length ? `
+      <table class="grid">
+        <thead><tr><th>Consultant</th>
+          ${weeks.map((we) => `<th title="Due ${esc(fmtDay(weekDue(we)))} ${state.deadlineTime}">Wk ending ${esc(fmtShort(we))}</th>`).join("")}
+          <th>Month-end</th><th class="num">Entries</th><th class="num">Total excl. VAT</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>` : `<div class="empty">No one is set to submit billings yet. Tick “Submits billings” under People.</div>`;
+  }
+
+  $("tracker").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-person]"); if (!a) return;
+    e.preventDefault();
+    $("f-consultant").value = a.dataset.person; $("f-status").value = "all"; $("f-period").value = "month";
+    state.selected.clear(); renderInvoicing(); showTab("inv");
+  });
+
+  // =====================================================================
+  // Invoicing
+  // =====================================================================
+  function invoiceSource() { return $("f-period").value === "open" ? (state.openRows || []) : monthRows(); }
+
+  function filteredRows() {
+    const st = $("f-status").value, cons = $("f-consultant").value, cli = $("f-client").value;
+    const q = $("f-search").value.trim().toLowerCase();
+    return invoiceSource().filter((r) => {
+      if (st === "toinv" && !["submitted", "final"].includes(r.status)) return false;
+      if (["final", "invoiced", "paid", "draft"].includes(st) && r.status !== st) return false;
+      if (cons && r.consultant_id !== cons) return false;
+      if (cli && String(r.client_id) !== cli) return false;
+      if (q && !`${r.narrative} ${r.comments || ""} ${r.invoice_no || ""} ${r.client_name} ${r.consultant_name}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  function fillFilterOptions() {
+    const keep = (sel, opts) => { const v = $(sel).value; $(sel).innerHTML = opts; if ([...$(sel).options].some((o) => o.value === v)) $(sel).value = v; };
+    keep("f-consultant", `<option value="">All consultants</option>` +
+      state.people.map((p) => `<option value="${p.id}">${esc(p.full_name || p.email)}</option>`).join(""));
+    keep("f-client", `<option value="">All clients</option>` +
+      state.clients.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join(""));
+  }
+
+  function renderInvoicing() {
+    fillFilterOptions();
+    const rows = filteredRows();
+    const ids = new Set(rows.map((r) => String(r.id)));
+    [...state.selected].forEach((id) => { if (!ids.has(id)) state.selected.delete(id); });
+
+    if (!rows.length) {
+      $("inv-table").innerHTML = `<div class="empty">No billing lines match these filters.</div>`;
+      updateActionBar(); return;
+    }
+    const groups = new Map();
+    rows.forEach((r) => { if (!groups.has(r.client_name)) groups.set(r.client_name, []); groups.get(r.client_name).push(r); });
+    const sorted = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const selectable = (r) => isFin() && r.status !== "draft";
+    const total = (arr, f) => arr.reduce((a, r) => a + num(r[f]), 0);
+
+    let html = `<table class="grid"><thead><tr>
+      <th>${isFin() ? `<input type="checkbox" id="sel-all" title="Select all">` : ""}</th>
+      <th>Date</th><th>Consultant</th><th>Service / type</th><th>Nature of work</th>
+      <th class="num">Hours</th><th class="num">Fee</th><th class="num">Expenses</th>
+      <th class="num">Excl. VAT</th><th class="num">VAT</th><th>Status</th></tr></thead><tbody>`;
+    for (const [client, list] of sorted) {
+      const sel = list.filter(selectable);
+      const allOn = sel.length && sel.every((r) => state.selected.has(String(r.id)));
+      const contacts = [...new Set(list.map((r) => r.invoice_contact).filter(Boolean))].join(" · ");
+      html += `<tr class="group">
+        <td>${isFin() && sel.length ? `<input type="checkbox" data-group="${esc(client)}" ${allOn ? "checked" : ""}>` : ""}</td>
+        <td colspan="7">${esc(client)} ${contacts ? `<span class="sub2">${esc(contacts)}</span>` : ""}</td>
+        <td class="num">${money(total(list, "total_excl_vat"))}</td><td class="num">${money(total(list, "vat_amount"))}</td><td></td></tr>`;
+      for (const r of list) {
+        const on = state.selected.has(String(r.id));
+        const exp = num(r.travel) + num(r.car_hire) + num(r.accommodation);
+        const inv = r.invoice_no ? `<span class="sub2">${esc(r.invoice_no)}${r.invoiced_at ? " · " + esc(fmtDate(r.invoiced_at)) : ""}</span>` : "";
+        const paid = r.paid_at ? `<span class="sub2">paid ${esc(fmtDate(r.paid_at))}</span>` : "";
+        html += `<tr class="${on ? "selected" : ""}">
+          <td>${selectable(r) ? `<input type="checkbox" data-row="${r.id}" ${on ? "checked" : ""}>` : (isFin() ? `<span class="hint" title="Not submitted yet">—</span>` : "")}</td>
+          <td class="nowrap">${esc(fmtDay(r.work_date))}</td>
+          <td>${esc(r.consultant_name)}</td>
+          <td>${esc(r.service_area)}<span class="sub2">${esc(r.work_type)}</span></td>
+          <td style="min-width:240px">${esc(r.narrative)}${r.comments ? `<span class="sub2">💬 ${esc(r.comments)}</span>` : ""}${(r.splits || []).length ? `<span class="sub2">🤝 ${esc(r.consultant_name)} ${Number(r.owner_share_pct)}% · ${r.splits.map((x) => `${esc(x.name)} ${Number(x.share_pct)}%`).join(" · ")}</span>` : ""}</td>
+          <td class="num">${r.hours != null ? round2(r.hours) : "—"}</td>
+          <td class="num">${money(r.fee_amount)}</td>
+          <td class="num">${exp ? money(exp) : "—"}</td>
+          <td class="num"><strong>${money(r.total_excl_vat)}</strong></td>
+          <td class="num">${money(r.vat_amount)}</td>
+          <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span>${inv}${paid}</td></tr>`;
+      }
+    }
+    html += `</tbody><tfoot><tr><td></td><td colspan="7">${rows.length} lines · ${groups.size} client${groups.size > 1 ? "s" : ""}</td>
+      <td class="num">${money(total(rows, "total_excl_vat"))}</td><td class="num">${money(total(rows, "vat_amount"))}</td><td></td></tr></tfoot></table>`;
+    $("inv-table").innerHTML = html;
+    const all = rows.filter(selectable);
+    if ($("sel-all")) $("sel-all").checked = all.length && all.every((r) => state.selected.has(String(r.id)));
+    updateActionBar();
+  }
+
+  function selectedRows() { return invoiceSource().filter((r) => state.selected.has(String(r.id))); }
+
+  function updateActionBar() {
+    const rows = selectedRows();
+    $("action-bar").hidden = !rows.length || !isFin();
+    const excl = rows.reduce((a, r) => a + num(r.total_excl_vat), 0);
+    const vat = rows.reduce((a, r) => a + num(r.vat_amount), 0);
+    $("sel-count").textContent = rows.length;
+    $("sel-excl").textContent = money(excl);
+    $("sel-incl").textContent = money(excl + vat);
+  }
+
+  $("inv-table").addEventListener("change", (e) => {
+    const t = e.target;
+    const rows = filteredRows().filter((r) => r.status !== "draft");
+    if (t.id === "sel-all") rows.forEach((r) => t.checked ? state.selected.add(String(r.id)) : state.selected.delete(String(r.id)));
+    else if (t.dataset.group != null) rows.filter((r) => r.client_name === t.dataset.group).forEach((r) => t.checked ? state.selected.add(String(r.id)) : state.selected.delete(String(r.id)));
+    else if (t.dataset.row) t.checked ? state.selected.add(t.dataset.row) : state.selected.delete(t.dataset.row);
+    renderInvoicing();
+  });
+
+  async function onFilterChange() {
+    if ($("f-period").value === "open" && !state.openRows) { $("inv-table").innerHTML = `<div class="empty">Loading…</div>`; await loadOpenRows(); }
+    renderInvoicing();
+  }
+  ["f-period", "f-status", "f-consultant", "f-client"].forEach((id) => $(id).addEventListener("change", onFilterChange));
+  $("f-search").addEventListener("input", renderInvoicing);
+  $("act-clear").onclick = () => { state.selected.clear(); renderInvoicing(); };
+
+  function openInvModal(mode) {
+    const rows = selectedRows();
+    state.invMode = mode;
+    const clients = [...new Set(rows.map((r) => r.client_name))];
+    const excl = rows.reduce((a, r) => a + num(r.total_excl_vat), 0);
+    $("inv-title").textContent = mode === "invoiced" ? "Mark as invoiced" : "Mark as paid";
+    $("inv-no-wrap").hidden = mode !== "invoiced";
+    $("inv-date-label").textContent = mode === "invoiced" ? "Invoice date" : "Date paid";
+    let body = `<strong>${rows.length}</strong> line${rows.length > 1 ? "s" : ""} · <strong>${money(excl)}</strong> excl. VAT · ${esc(clients.join(", "))}`;
+    if (mode === "invoiced" && clients.length > 1) body += `<br><br><span style="color:var(--warn)">These lines are for ${clients.length} different clients — they'll all get the same invoice number.</span>`;
+    if (mode === "invoiced" && rows.some((r) => r.status === "submitted")) body += `<br><br><span style="color:var(--warn)">Some lines haven't been month-end final-submitted yet.</span>`;
+    if (mode === "paid") {
+      const notInv = rows.filter((r) => r.status !== "invoiced" && r.status !== "paid").length;
+      if (notInv) body += `<br><br>${notInv} line${notInv > 1 ? "s aren't" : " isn't"} invoiced yet and will be skipped.`;
+    }
+    $("inv-body").innerHTML = body;
+    const existing = [...new Set(rows.map((r) => r.invoice_no).filter(Boolean))];
+    $("inv-no").value = existing.length === 1 ? existing[0] : "";
+    $("inv-date").value = todaySA();
+    $("inv-msg").textContent = "";
+    $("inv-modal").hidden = false;
+    setTimeout(() => (mode === "invoiced" ? $("inv-no") : $("inv-date")).focus(), 30);
+  }
+  $("act-invoice").onclick = () => openInvModal("invoiced");
+  $("act-paid").onclick = () => openInvModal("paid");
+  $("inv-cancel").onclick = () => ($("inv-modal").hidden = true);
+
+  $("inv-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const mode = state.invMode;
+    if (mode === "invoiced" && !$("inv-no").value.trim()) { $("inv-msg").textContent = "Please enter the invoice number."; return; }
+    $("inv-save").disabled = true;
+    const { data, error } = await sb.rpc("set_billing_status", {
+      p_ids: [...state.selected].map(Number), p_status: mode,
+      p_invoice_no: mode === "invoiced" ? $("inv-no").value.trim() : null,
+      p_date: $("inv-date").value || null,
+    });
+    $("inv-save").disabled = false;
+    if (error) { $("inv-msg").textContent = errText(error); return; }
+    $("inv-modal").hidden = true;
+    toast(`${data} line${data === 1 ? "" : "s"} marked ${mode}`);
+    state.selected.clear(); await reloadBillings();
+  });
+
+  $("act-undo").onclick = async () => {
+    const rows = selectedRows().filter((r) => r.status === "invoiced" || r.status === "paid");
+    if (!rows.length) return toast("None of the selected lines are invoiced.", "error");
+    const ok = await confirmBox({ title: "Undo invoicing?", body: `${rows.length} line${rows.length > 1 ? "s" : ""} will go back to <strong>final</strong> and lose their invoice number and payment date.`, yes: "Undo", danger: true });
+    if (!ok) return;
+    const { data, error } = await sb.rpc("set_billing_status", { p_ids: rows.map((r) => r.id), p_status: "final" });
+    if (error) return toast(errText(error), "error");
+    toast(`${data} line${data === 1 ? "" : "s"} reset`); state.selected.clear(); await reloadBillings();
+  };
+
+  async function reloadBillings() { await loadMonth(); if ($("f-period").value === "open") { await loadOpenRows(); renderInvoicing(); } }
+
+  // =====================================================================
+  // Export
+  // =====================================================================
+  $("export-btn").addEventListener("click", () => {
+    const rows = state.tab === "inv" ? filteredRows() : monthRows();
+    if (!rows.length) return toast("Nothing to export.");
+    const data = rows.map((r) => ({
+      "Date": r.work_date, "Consultant": r.consultant_name, "Client": r.client_name,
+      "Invoice contact": r.invoice_contact || "", "Service area": r.service_area, "Type of work": r.work_type,
+      "Nature of work done": r.narrative, "Hours": r.hours != null ? num(r.hours) : "", "Hourly rate": r.hourly_rate != null ? num(r.hourly_rate) : "",
+      "Fee": num(r.fee_amount), "Travel": num(r.travel), "Car hire": num(r.car_hire), "Accommodation": num(r.accommodation),
+      "Total excl. VAT": num(r.total_excl_vat), "VAT": num(r.vat_amount), "Total incl. VAT": round2(num(r.total_excl_vat) + num(r.vat_amount)),
+      "Comments": r.comments || "",
+      "Split": (r.splits || []).length ? `${r.consultant_name} ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
+      "Status": r.status, "Invoice no.": r.invoice_no || "",
+      "Invoice date": r.invoiced_at ? r.invoiced_at.slice(0, 10) : "", "Paid date": r.paid_at ? r.paid_at.slice(0, 10) : "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [10, 18, 24, 22, 16, 22, 50, 7, 10, 12, 10, 10, 13, 14, 11, 14, 30, 28, 10, 14, 12, 12].map((w) => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Billings");
+    const label = state.tab === "inv" && $("f-period").value === "open" ? "open" : state.month.slice(0, 7);
+    XLSX.writeFile(wb, `GBS_Billings_All_${label}.xlsx`);
+  });
+
+  // =====================================================================
+  // Alerts
+  // =====================================================================
+  const ALERT_LABEL = { overdue_week: "Overdue week", overdue_month: "Overdue month-end", late_week: "Late week", late_month: "Late month-end", new_user: "New account" };
+  async function loadAlerts() {
+    let q = sb.from("notifications").select("*, profiles!notifications_consultant_id_fkey(full_name, email)").order("created_at", { ascending: false }).limit(300);
+    if (!state.showResolved) q = q.is("resolved_at", null);
+    const { data, error } = await q;
+    if (error) { $("alerts-list").innerHTML = `<div class="empty">Could not load alerts: ${esc(errText(error))}</div>`; return; }
+    state.alerts = data || [];
+    const open = state.alerts.filter((a) => !a.resolved_at).length;
+    $("tab-alert-count").textContent = open; $("tab-alert-count").hidden = !open;
+    renderAlerts();
+  }
+  function renderAlerts() {
+    if (!state.alerts.length) { $("alerts-list").innerHTML = `<div class="empty">No ${state.showResolved ? "" : "open "}alerts — everyone is up to date.</div>`; return; }
+    $("alerts-list").innerHTML = state.alerts.map((a) => `
+      <div class="alert-item${a.resolved_at ? " done" : ""}">
+        <span class="pill ${a.kind.startsWith("overdue") ? "late" : a.kind === "new_user" ? "" : "warn"}">${ALERT_LABEL[a.kind] || esc(a.kind)}</span>
+        <div class="alert-text">
+          <div>${esc(a.message)}</div>
+          <div class="hint">${esc(fmtWhen(a.created_at))}${a.emailed_at ? " · emailed" : ""}${a.resolved_at ? " · cleared " + esc(fmtWhen(a.resolved_at)) : ""}${a.profiles?.email && a.kind !== "new_user" ? ` · <a href="mailto:${esc(a.profiles.email)}?subject=${encodeURIComponent("GBS billings outstanding")}">Email ${esc(a.profiles.full_name || a.profiles.email)}</a>` : ""}</div>
+        </div>
+        ${!a.resolved_at && isFin() ? `<button class="link-btn" data-resolve="${a.id}">Mark done</button>` : ""}
+      </div>`).join("");
+  }
+  $("alerts-toggle").onclick = () => { state.showResolved = !state.showResolved; $("alerts-toggle").textContent = state.showResolved ? "Hide cleared" : "Show cleared"; loadAlerts(); };
+  $("alerts-check").onclick = async () => {
+    const { data, error } = await sb.rpc("check_overdue");
+    if (error) return toast(errText(error), "error");
+    toast(data ? `${data} new alert${data > 1 ? "s" : ""}` : "No new alerts"); loadAlerts();
+  };
+  $("alerts-email").onclick = async () => {
+    const { data, error } = await sb.rpc("send_alert_emails", { p_test: false });
+    if (error) return toast(errText(error), "error");
+    toast(data ? `Emailed ${data} alert${data > 1 ? "s" : ""}` : "No new alerts to email"); loadAlerts();
+  };
+  $("alerts-list").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-resolve]"); if (!b) return;
+    const { error } = await sb.from("notifications").update({ resolved_at: new Date().toISOString(), resolved_by: state.user.id }).eq("id", b.dataset.resolve);
+    if (error) return toast(errText(error), "error");
+    loadAlerts();
+  });
+
+  // =====================================================================
+  // Editable tables (People, Lists, Holidays)
+  // =====================================================================
+  function cellHtml(row, col, editable, table, idKey) {
+    const v = row[col.key];
+    if (col.render) return `<td class="${col.cls || ""}">${col.render(row)}</td>`;
+    if (!editable || col.readonly) {
+      if (col.type === "checkbox") return `<td>${v ? "✓" : "—"}</td>`;
+      if (col.type === "select") return `<td>${esc((col.options.find((o) => o[0] === v) || [, v])[1])}</td>`;
+      return `<td>${esc(v ?? "")}</td>`;
+    }
+    const data = `data-table="${table}" data-id="${esc(row[idKey])}" data-key="${col.key}" data-type="${col.type || "text"}"`;
+    if (col.type === "checkbox") return `<td class="cell-in"><input type="checkbox" ${data} ${v ? "checked" : ""}></td>`;
+    if (col.type === "select") return `<td class="cell-in"><select ${data}>${col.options.map(([val, lab]) => `<option value="${esc(val)}" ${val === v ? "selected" : ""}>${esc(lab)}</option>`).join("")}</select></td>`;
+    return `<td class="cell-in"><input ${data} type="${col.type === "number" ? "number" : "text"}" value="${esc(v ?? "")}" ${col.width ? `style="width:${col.width}"` : ""}></td>`;
+  }
+  function editableTable(rows, cols, { editable, table, idKey = "id", empty = "Nothing here yet." }) {
+    if (!rows.length) return `<div class="empty">${empty}</div>`;
+    return `<table class="grid"><thead><tr>${cols.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map((r) => `<tr class="${r.active === false ? "muted" : ""}">${cols.map((c) => cellHtml(r, c, editable, table, idKey)).join("")}</tr>`).join("")}</tbody></table>`;
+  }
+
+  document.addEventListener("change", async (e) => {
+    const el = e.target.closest("[data-table]"); if (!el) return;
+    const { table, id, key, type } = el.dataset;
+    let value = type === "checkbox" ? el.checked : el.value.trim();
+    if (type === "number") value = value === "" ? null : Number(value);
+    if (key === "name" && !value) { toast("Name can't be empty", "error"); return reloadTable(table); }
+    if (table === "profiles" && key === "role" && id === state.user.id && value !== "admin") {
+      const ok = await confirmBox({ title: "Remove your own admin access?", body: "You won't be able to manage people or settings any more.", yes: "Change my role", danger: true });
+      if (!ok) return reloadTable(table);
+    }
+    const { error } = await sb.from(table).update({ [key]: value }).eq("id", table === "profiles" ? id : Number(id));
+    if (error) { toast(errText(error), "error"); return reloadTable(table); }
+    toast("Saved");
+    if (table === "profiles") { await loadPeople(); renderPeople(); renderTracker(); fillFilterOptions(); }
+    else { await loadLookups(); fillFilterOptions(); }
+  });
+  async function reloadTable(table) {
+    if (table === "profiles") { await loadPeople(); renderPeople(); } else { await loadLookups(); renderLists(); }
+  }
+
+  // ---- People
+  const ROLES = [["consultant", "Consultant"], ["finance", "Finance"], ["executive", "Executive (view only)"], ["admin", "Admin"]];
+  function renderPeople() {
+    $("people-table").innerHTML = editableTable(state.people, [
+      { key: "full_name", label: "Name" },
+      { key: "email", label: "Email", render: (p) => `${esc(p.email)}${p.email_confirmed_at ? "" : ` <span class="st warn">not confirmed</span>`}` },
+      { key: "role", label: "Role", type: "select", options: ROLES },
+      { key: "submits_billings", label: "Submits billings", type: "checkbox" },
+      { key: "active", label: "Active", type: "checkbox" },
+      { key: "last_sign_in_at", label: "Last sign-in", render: (p) => esc(fmtWhen(p.last_sign_in_at) || "never"), cls: "nowrap" },
+      { key: "created_at", label: "Joined", render: (p) => esc(fmtDate(p.created_at)), cls: "nowrap" },
+    ], { editable: isAdmin(), table: "profiles", empty: "No people yet." });
+  }
+
+  // ---- Lists
+  function renderLists() {
+    $("clients-table").innerHTML = editableTable(state.clients, [
+      { key: "name", label: "Client" }, { key: "invoice_contact", label: "Invoice contact" },
+      { key: "contact_email", label: "Contact email" }, { key: "active", label: "Active", type: "checkbox" },
+    ], { editable: isFin(), table: "clients", empty: "No clients yet — consultants add them when they capture billings." });
+    $("areas-table").innerHTML = editableTable(state.areas, [
+      { key: "name", label: "Service area" }, { key: "sort_order", label: "Order", type: "number", width: "90px" },
+      { key: "active", label: "Active", type: "checkbox" },
+    ], { editable: isAdmin(), table: "service_areas" });
+    $("types-table").innerHTML = editableTable(state.types, [
+      { key: "name", label: "Type of work" }, { key: "is_recurring", label: "Recurring", type: "checkbox" },
+      { key: "sort_order", label: "Order", type: "number", width: "90px" }, { key: "active", label: "Active", type: "checkbox" },
+    ], { editable: isAdmin(), table: "work_types" });
+  }
+
+  async function addRow(table, row, clearIds) {
+    const { error } = await sb.from(table).insert(row);
+    if (error) return toast(error.code === "23505" ? "That name already exists." : errText(error), "error");
+    clearIds.forEach((id) => { const el = $(id); el.type === "checkbox" ? (el.checked = false) : (el.value = ""); });
+    toast("Added"); await loadLookups(); renderLists(); fillFilterOptions();
+  }
+  $("nc-add").onclick = () => {
+    const name = $("nc-name").value.trim().replace(/\s+/g, " ");
+    if (!name) return toast("Type the client name", "error");
+    addRow("clients", { name, invoice_contact: $("nc-contact").value.trim() || null, contact_email: $("nc-email").value.trim() || null }, ["nc-name", "nc-contact", "nc-email"]);
+  };
+  $("na-add").onclick = () => {
+    const name = $("na-name").value.trim(); if (!name) return toast("Type the service area", "error");
+    addRow("service_areas", { name, sort_order: Number($("na-sort").value) || 100 }, ["na-name", "na-sort"]);
+  };
+  $("nt-add").onclick = () => {
+    const name = $("nt-name").value.trim(); if (!name) return toast("Type the type of work", "error");
+    addRow("work_types", { name, is_recurring: $("nt-rec").checked, sort_order: Number($("nt-sort").value) || 100 }, ["nt-name", "nt-sort", "nt-rec"]);
+  };
+
+  // =====================================================================
+  // Settings (admin)
+  // =====================================================================
+  function renderSettings() {
+    if (!isAdmin()) return;
+    $("set-alert-emails").value = state.settings.alert_emails || "";
+    $("set-alert-from").value = state.settings.alert_from || "";
+    $("set-app-url").value = state.settings.app_url || "";
+    $("holidays-table").innerHTML = state.holidays.length ? `<table class="grid"><thead><tr><th>Date</th><th>Holiday</th><th></th></tr></thead><tbody>
+      ${state.holidays.map((h) => `<tr class="${h.holiday_date < todaySA() ? "muted" : ""}"><td class="nowrap">${esc(fmtDay(h.holiday_date))} ${h.holiday_date.slice(0, 4)}</td><td>${esc(h.name)}</td>
+        <td class="row-actions"><button class="link-btn danger" data-del-holiday="${h.holiday_date}">Remove</button></td></tr>`).join("")}
+      </tbody></table>` : `<div class="empty">No holidays listed.</div>`;
+  }
+
+  async function loadEmailStatus() {
+    if (!isAdmin()) return;
+    const { data, error } = await sb.rpc("email_status");
+    if (error) { $("email-status").innerHTML = `<span class="dot bad"></span>Could not check email set-up: ${esc(errText(error))}`; return; }
+    const recent = data.recent || [];
+    const last = recent[0];
+    let line = data.has_key ? `<span class="dot ok"></span>Resend API key saved.` : `<span class="dot bad"></span>No Resend API key saved yet — alerts are only shown in the app.`;
+    if (last) {
+      const ok = last.status_code >= 200 && last.status_code < 300;
+      line += ` Last send: <strong style="color:${ok ? "var(--ok)" : "var(--danger)"}">${ok ? "delivered to Resend" : "failed"}</strong> (${esc(fmtWhen(last.created))}${last.status_code ? ", code " + last.status_code : ""}).`;
+    }
+    $("email-status").innerHTML = line;
+    const failed = recent.filter((r) => !(r.status_code >= 200 && r.status_code < 300));
+    $("email-recent").innerHTML = failed.length ? `<p class="hint" style="margin-top:14px">Recent errors:</p>` + failed.map((r) =>
+      `<div class="hint" style="font-family:ui-monospace,Consolas,monospace;background:#FAFAFC;padding:8px 10px;border-radius:8px;margin-top:6px">${esc(fmtWhen(r.created))} · ${esc(r.status_code || "")} ${esc(r.error_msg || r.content || "")}</div>`).join("") : "";
+  }
+
+  $("set-save").onclick = async () => {
+    const updates = { alert_emails: $("set-alert-emails").value.trim(), alert_from: $("set-alert-from").value.trim(), app_url: $("set-app-url").value.trim() };
+    const bad = updates.alert_emails.split(",").map((x) => x.trim()).filter(Boolean).filter((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    if (bad.length) return toast("Check these email addresses: " + bad.join(", "), "error");
+    for (const [key, value] of Object.entries(updates)) {
+      const { error } = await sb.from("app_settings").update({ value }).eq("key", key);
+      if (error) return toast(errText(error), "error");
+    }
+    await loadSettings(); toast("Settings saved");
+  };
+  $("set-key-save").onclick = async () => {
+    const key = $("set-key").value.trim();
+    if (!key.startsWith("re_")) return toast("A Resend API key starts with re_", "error");
+    const { error } = await sb.rpc("set_resend_key", { p_key: key });
+    if (error) return toast(errText(error), "error");
+    $("set-key").value = ""; toast("API key saved securely"); loadEmailStatus();
+  };
+  $("set-test").onclick = async () => {
+    const { error } = await sb.rpc("send_alert_emails", { p_test: true });
+    if (error) return toast(errText(error), "error");
+    toast("Test email sent — check your inbox in a minute");
+    setTimeout(loadEmailStatus, 4000);
+  };
+  $("nh-add").onclick = async () => {
+    const d = $("nh-date").value, n = $("nh-name").value.trim();
+    if (!d || !n) return toast("Choose a date and type the holiday name", "error");
+    const { error } = await sb.from("public_holidays").insert({ holiday_date: d, name: n });
+    if (error) return toast(error.code === "23505" ? "That date is already a holiday." : errText(error), "error");
+    $("nh-date").value = ""; $("nh-name").value = "";
+    await loadSettings(); renderSettings(); renderTracker(); toast("Holiday added");
+  };
+  $("holidays-table").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-del-holiday]"); if (!b) return;
+    const ok = await confirmBox({ title: "Remove this holiday?", body: `${esc(fmtDay(b.dataset.delHoliday))} — deadlines on this day will no longer move.`, yes: "Remove", danger: true });
+    if (!ok) return;
+    const { error } = await sb.from("public_holidays").delete().eq("holiday_date", b.dataset.delHoliday);
+    if (error) return toast(errText(error), "error");
+    await loadSettings(); renderSettings(); renderTracker();
+  });
+
+  // =====================================================================
+  // Navigation + session
+  // =====================================================================
+  $("prev-month").onclick = () => { state.month = addMonths(state.month, -1); loadMonth(); };
+  $("next-month").onclick = () => { state.month = addMonths(state.month, 1); loadMonth(); };
+  $("this-month").onclick = () => { state.month = monthStart(todaySA()); loadMonth(); };
+  $("logout-btn").onclick = async () => { await sb.auth.signOut(); location.replace("index.html"); };
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("confirm-modal").hidden) return $("confirm-no").click();
+    if (!$("inv-modal").hidden) $("inv-modal").hidden = true;
+  });
+  sb.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") location.replace("index.html"); });
+
+  init();
+  </script>
+</body>
+</html>

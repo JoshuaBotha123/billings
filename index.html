@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>GBS Billings</title>
+  <link rel="icon" href="assets/gbs-logo.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+    .panel { width: 100%; max-width: 420px; }
+    .panel .logo { margin: 0 auto 28px; }
+    .center { text-align: center; }
+    .checks { list-style: none; padding: 0; margin: 20px 0 24px; }
+    .checks li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+    .checks li:last-child { border-bottom: 0; }
+    .checks .v { color: var(--muted); }
+    .checks .pass { color: var(--ok); font-weight: 600; }
+    .checks .fail { color: var(--danger); font-weight: 600; }
+    .foot { margin-top: 20px; font-size: 12px; color: var(--muted); text-align: center; }
+    .alt { margin-top: 18px; text-align: center; font-size: 14px; color: var(--muted); }
+    .alt a { color: var(--gbs-blue); text-decoration: none; font-weight: 500; }
+    .alt a:hover { text-decoration: underline; }
+    .row-link { text-align: right; margin-top: 8px; font-size: 13px; }
+    .row-link a { color: var(--gbs-blue); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="panel">
+      <div class="card">
+        <img class="logo" src="assets/gbs-logo.png" alt="Global Business Solutions">
+
+        <!-- Sign in -->
+        <section id="login-view">
+          <h1 class="center">Billings</h1>
+          <p class="sub center">Sign in with your GBS email</p>
+          <form id="login-form" novalidate>
+            <label for="email">Email</label>
+            <input id="email" type="email" autocomplete="username" placeholder="name@globalbusiness.co.za" required>
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" required>
+            <div class="row-link"><a href="#" data-go="forgot">Forgot password?</a></div>
+            <div style="height:14px"></div>
+            <button class="btn btn-primary btn-block" id="login-btn" type="submit">Sign in</button>
+            <div class="msg" id="login-msg" role="status"></div>
+          </form>
+          <p class="alt">New to GBS Billings? <a href="#" data-go="signup">Create an account</a></p>
+        </section>
+
+        <!-- Create account -->
+        <section id="signup-view" hidden>
+          <h1 class="center">Create account</h1>
+          <p class="sub center">For GBS staff with a @globalbusiness.co.za email</p>
+          <form id="signup-form" novalidate>
+            <label for="su-name">Full name</label>
+            <input id="su-name" autocomplete="name" placeholder="e.g. Thabo Mokoena" required>
+            <label for="su-email">Work email</label>
+            <input id="su-email" type="email" autocomplete="username" placeholder="name@globalbusiness.co.za" required>
+            <label for="su-pass">Password</label>
+            <input id="su-pass" type="password" autocomplete="new-password" placeholder="At least 10 characters" required>
+            <label for="su-pass2">Confirm password</label>
+            <input id="su-pass2" type="password" autocomplete="new-password" required>
+            <div style="height:20px"></div>
+            <button class="btn btn-primary btn-block" id="su-btn" type="submit">Create account</button>
+            <div class="msg" id="su-msg" role="status"></div>
+          </form>
+          <p class="alt">Already have an account? <a href="#" data-go="login">Sign in</a></p>
+        </section>
+
+        <!-- Forgot password -->
+        <section id="forgot-view" hidden>
+          <h1 class="center">Reset password</h1>
+          <p class="sub center">We'll email you a link to choose a new password</p>
+          <form id="forgot-form" novalidate>
+            <label for="fp-email">Work email</label>
+            <input id="fp-email" type="email" autocomplete="username" placeholder="name@globalbusiness.co.za" required>
+            <div style="height:20px"></div>
+            <button class="btn btn-primary btn-block" id="fp-btn" type="submit">Send reset link</button>
+            <div class="msg" id="fp-msg" role="status"></div>
+          </form>
+          <p class="alt"><a href="#" data-go="login">Back to sign in</a></p>
+        </section>
+
+        <!-- Choose a new password (after clicking the email link) -->
+        <section id="reset-view" hidden>
+          <h1 class="center">Choose a new password</h1>
+          <form id="reset-form" novalidate>
+            <label for="rp-pass">New password</label>
+            <input id="rp-pass" type="password" autocomplete="new-password" placeholder="At least 10 characters" required>
+            <label for="rp-pass2">Confirm new password</label>
+            <input id="rp-pass2" type="password" autocomplete="new-password" required>
+            <div style="height:20px"></div>
+            <button class="btn btn-primary btn-block" id="rp-btn" type="submit">Save password</button>
+            <div class="msg" id="rp-msg" role="status"></div>
+          </form>
+        </section>
+
+        <!-- Signed in: connection check (open with index.html?check=1) -->
+        <section id="home-view" hidden>
+          <h1 id="hello">Welcome</h1>
+          <p class="sub"><span id="who"></span> · <span class="pill" id="role">—</span></p>
+          <h3 style="font-size:15px;color:var(--muted);font-weight:500">Setup check</h3>
+          <ul class="checks" id="checks"></ul>
+          <a class="btn btn-primary btn-block" href="my-billings.html" style="text-decoration:none">Open My billings</a>
+          <div style="height:10px"></div>
+          <button class="btn btn-ghost btn-block" id="logout-btn">Sign out</button>
+        </section>
+      </div>
+      <p class="foot">Global Business Solutions · Future thinking, now</p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const cfg = window.GBS_CONFIG;
+    const $ = (id) => document.getElementById(id);
+    const configured = !cfg.SUPABASE_URL.includes("YOUR-PROJECT") && !cfg.SUPABASE_ANON_KEY.includes("YOUR-");
+    const sb = configured ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+    const wantsCheck = new URLSearchParams(location.search).has("check");
+    const isRecovery = /type=recovery/.test(location.hash);
+    const MIN_PASS = 10;
+    // Where links in emails should bring people back to (only works once the site is hosted)
+    const backUrl = location.protocol.startsWith("http") ? location.origin + location.pathname : undefined;
+
+    const VIEWS = ["login", "signup", "forgot", "reset", "home"];
+    function show(view) { VIEWS.forEach((v) => ($(v + "-view").hidden = v !== view)); }
+    function setMsg(id, text, kind = "error") { const m = $(id); m.textContent = text; m.className = "msg " + kind; }
+    const domainOk = (email) => email.endsWith("@" + cfg.ALLOWED_DOMAIN);
+
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-go]"); if (!a) return;
+      e.preventDefault(); show(a.dataset.go);
+      const carry = $("email").value.trim();
+      if (a.dataset.go === "forgot" && carry) $("fp-email").value = carry;
+    });
+
+    if (!configured) setMsg("login-msg", "Add your Supabase URL and anon key in config.js first.");
+
+    // ---- Sign in
+    $("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!sb) return;
+      const email = $("email").value.trim().toLowerCase();
+      const password = $("password").value;
+      if (!domainOk(email)) return setMsg("login-msg", "Please use your @" + cfg.ALLOWED_DOMAIN + " email.");
+      $("login-btn").disabled = true; setMsg("login-msg", "Signing in…", "");
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      $("login-btn").disabled = false;
+      if (error) {
+        const m = error.message || "";
+        return setMsg("login-msg",
+          /invalid login/i.test(m) ? "Email or password is incorrect." :
+          /not confirmed/i.test(m) ? "Please confirm your email first — check your inbox (and junk folder) for the link we sent." : m);
+      }
+      setMsg("login-msg", "");
+      afterSignIn();
+    });
+
+    // ---- Create account
+    $("signup-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!sb) return;
+      const full_name = $("su-name").value.trim().replace(/\s+/g, " ");
+      const email = $("su-email").value.trim().toLowerCase();
+      const password = $("su-pass").value;
+      if (!full_name) return setMsg("su-msg", "Please enter your full name.");
+      if (!domainOk(email)) return setMsg("su-msg", "Only @" + cfg.ALLOWED_DOMAIN + " email addresses can register.");
+      if (password.length < MIN_PASS) return setMsg("su-msg", `Password must be at least ${MIN_PASS} characters.`);
+      if (password !== $("su-pass2").value) return setMsg("su-msg", "The passwords don't match.");
+      $("su-btn").disabled = true; setMsg("su-msg", "Creating your account…", "");
+      const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name }, emailRedirectTo: backUrl } });
+      $("su-btn").disabled = false;
+      if (error) {
+        const m = error.message || "";
+        return setMsg("su-msg",
+          /already registered|already exists/i.test(m) ? "There's already an account for this email — sign in or reset your password." :
+          /database error/i.test(m) ? "Only @" + cfg.ALLOWED_DOMAIN + " email addresses can register." : m);
+      }
+      if (data.session) return afterSignIn();          // email confirmation switched off
+      $("signup-form").reset();
+      setMsg("su-msg", "Almost done! We've emailed you a link to confirm your address. Click it, then come back here and sign in.", "ok");
+    });
+
+    // ---- Forgot password
+    $("forgot-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!sb) return;
+      const email = $("fp-email").value.trim().toLowerCase();
+      if (!domainOk(email)) return setMsg("fp-msg", "Please use your @" + cfg.ALLOWED_DOMAIN + " email.");
+      $("fp-btn").disabled = true;
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: backUrl });
+      $("fp-btn").disabled = false;
+      if (error) return setMsg("fp-msg", error.message);
+      setMsg("fp-msg", "If that email has an account, a reset link is on its way. Check your inbox (and junk folder).", "ok");
+    });
+
+    // ---- New password (arrives here from the reset email)
+    $("reset-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const password = $("rp-pass").value;
+      if (password.length < MIN_PASS) return setMsg("rp-msg", `Password must be at least ${MIN_PASS} characters.`);
+      if (password !== $("rp-pass2").value) return setMsg("rp-msg", "The passwords don't match.");
+      $("rp-btn").disabled = true;
+      const { error } = await sb.auth.updateUser({ password });
+      $("rp-btn").disabled = false;
+      if (error) return setMsg("rp-msg", error.message);
+      setMsg("rp-msg", "Password saved. Taking you in…", "ok");
+      history.replaceState(null, "", location.pathname);
+      setTimeout(() => location.replace("my-billings.html"), 900);
+    });
+
+    $("logout-btn").addEventListener("click", async () => { await sb.auth.signOut(); show("login"); });
+
+    // Signed in: go straight to the app, unless the setup check was asked for
+    function afterSignIn() {
+      if (wantsCheck) loadHome();
+      else location.replace("my-billings.html");
+    }
+
+    async function count(table) {
+      const { count, error } = await sb.from(table).select("*", { count: "exact", head: true });
+      return error ? { ok: false, v: error.message } : { ok: true, v: count };
+    }
+
+    async function loadHome() {
+      show("home");
+      const { data: { user } } = await sb.auth.getUser();
+      const { data: profile, error } = await sb.from("profiles").select("full_name, role").eq("id", user.id).single();
+      $("hello").textContent = "Welcome, " + (profile?.full_name?.split(" ")[0] || "there");
+      $("who").textContent = user.email;
+      $("role").textContent = profile?.role || "no profile";
+      const rows = [
+        ["Signed in", { ok: true, v: "Yes" }],
+        ["Profile & role", error ? { ok: false, v: error.message } : { ok: true, v: profile.role }],
+        ["Service areas", await count("service_areas")],
+        ["Work types", await count("work_types")],
+        ["Clients", await count("clients")],
+        ["Billing entries visible", await count("billing_entries")],
+        ["Submissions visible", await count("submissions")],
+        ["Public holidays", await count("public_holidays")],
+      ];
+      $("checks").innerHTML = rows.map(([label, r]) =>
+        `<li><span>${label}</span><span class="${r.ok ? "pass" : "fail"}">${r.ok ? "✓ " : "✕ "}<span class="v">${r.v}</span></span></li>`
+      ).join("");
+    }
+
+    if (sb) {
+      sb.auth.onAuthStateChange((event) => { if (event === "PASSWORD_RECOVERY") show("reset"); });
+      sb.auth.getSession().then(({ data }) => {
+        if (isRecovery) return show("reset");
+        data.session ? afterSignIn() : show("login");
+      });
+    }
+  </script>
+</body>
+</html>
