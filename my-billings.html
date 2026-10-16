@@ -52,6 +52,11 @@
     </section>
 
     <div id="weeks"><div class="empty">Loading…</div></div>
+
+    <section class="panel-card" id="recurring-card" hidden style="margin-top:8px">
+      <h3>🔁 Repeating billings <span class="spacer"></span><span class="note" style="font-weight:400">A new draft is created automatically on each date — check it and submit as usual.</span></h3>
+      <div class="table-wrap" id="recurring-table"></div>
+    </section>
   </main>
 
   <!-- Entry form -->
@@ -78,6 +83,25 @@
         <div>
           <label for="f-type">Type of work</label>
           <select id="f-type" required></select>
+        </div>
+        <div class="span2 repeat-box" id="repeat-box" hidden>
+          <label class="check-inline" style="margin:0"><input type="checkbox" id="f-repeat"> Repeat this billing automatically</label>
+          <div class="grid2" id="repeat-opts" hidden>
+            <div>
+              <label for="f-every">How often</label>
+              <select id="f-every">
+                <option value="1">Every month</option>
+                <option value="3">Every 3 months</option>
+                <option value="6">Every 6 months</option>
+                <option value="12">Every 12 months</option>
+              </select>
+            </div>
+            <div>
+              <label for="f-times">How many times in total</label>
+              <input id="f-times" type="number" min="2" max="120" step="1" placeholder="Blank = until I stop it">
+            </div>
+          </div>
+          <div class="hint" id="repeat-hint"></div>
         </div>
         <div class="span2">
           <label for="f-contact">Invoice contact</label>
@@ -176,7 +200,8 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="brand-export.js"></script>
   <script src="config.js"></script>
   <script>
   // =====================================================================
@@ -258,7 +283,7 @@
       sb.from("profiles").select("full_name, role, active").eq("id", state.user.id).single(),
       sb.from("app_settings").select("key, value"),
       sb.from("service_areas").select("id, name").eq("active", true).order("sort_order"),
-      sb.from("work_types").select("id, name, is_recurring").eq("active", true).order("sort_order"),
+      sb.from("work_types").select("id, name, is_recurring, default_repeat_months").eq("active", true).order("sort_order"),
       sb.from("public_holidays").select("holiday_date"),
     ]);
     state.holidays = new Set((h.data || []).map((x) => x.holiday_date));
@@ -321,6 +346,7 @@
     ]);
     if (e.error) { $("weeks").innerHTML = `<div class="empty">Could not load entries: ${esc(e.error.message)}</div>`; return; }
     state.entries = e.data || [];
+    loadRecurring();
     state.subs = s.data || [];
     render();
   }
@@ -470,7 +496,7 @@
         <td class="nowrap">${esc(fmtDay(r.work_date))}</td>
         <td>${esc(r.client_name)}${r.invoice_contact ? `<span class="sub2">${esc(r.invoice_contact)}</span>` : ""}</td>
         <td>${esc(r.service_area)}<span class="sub2">${esc(r.work_type)}</span></td>
-        <td class="narr">${esc(r.narrative)}${r.comments ? `<small>💬 ${esc(r.comments)}</small>` : ""}${(r.splits || []).length ? `<small>🤝 You ${Number(r.owner_share_pct)}% · ${r.splits.map((x) => `${esc(x.name)} ${Number(x.share_pct)}%`).join(" · ")}</small>` : ""}</td>
+        <td class="narr">${esc(r.narrative)}${r.recurring_id ? ` <span title="Repeating billing" aria-label="Repeating billing">🔁</span>` : ""}${r.comments ? `<small>💬 ${esc(r.comments)}</small>` : ""}${(r.splits || []).length ? `<small>🤝 You ${Number(r.owner_share_pct)}% · ${r.splits.map((x) => `${esc(x.name)} ${Number(x.share_pct)}%`).join(" · ")}</small>` : ""}</td>
         <td class="num">${r.hours != null ? round2(r.hours) : "—"}</td>
         <td class="num">${money(r.fee_amount)}</td>
         <td class="num">${exp ? money(exp) : "—"}</td>
@@ -520,6 +546,62 @@
     readSplits(); state.splits.splice(Number(b.dataset.splitDel), 1); renderSplits();
   });
 
+  // ---- Repeating billings
+  const EVERY = { 1: "Every month", 2: "Every 2 months", 3: "Every 3 months", 6: "Every 6 months", 12: "Every 12 months" };
+  const addMonthsKeep = (d, n) => { const [y, m, day] = d.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); const dim = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate(); t.setUTCDate(Math.min(day, dim)); return iso(t); };
+  function updateRepeat(resetDefaults = false) {
+    const type = state.types.find((t) => String(t.id) === $("f-type").value);
+    const already = state.editing?.recurring_id;
+    const show = !!type && (type.is_recurring || already);
+    $("repeat-box").hidden = !show;
+    if (!show) return;
+    $("f-repeat").disabled = !!already;
+    if (already) {
+      $("repeat-opts").hidden = true;
+      $("repeat-hint").textContent = "This billing is part of a repeating series — manage it under Repeating billings below.";
+      return;
+    }
+    if (resetDefaults && type.default_repeat_months) $("f-every").value = String(type.default_repeat_months);
+    $("repeat-opts").hidden = !$("f-repeat").checked;
+    if (!$("f-repeat").checked) { $("repeat-hint").textContent = type.name.includes("Retainer") ? "Tip: retainers usually repeat every month for the length of the contract." : type.name.includes("Bot") ? "Tip: bot renewals usually repeat every 6 or 12 months." : ""; return; }
+    const d = $("f-date").value, every = Number($("f-every").value), times = Number($("f-times").value) || 0;
+    if (!d) { $("repeat-hint").textContent = ""; return; }
+    let txt = `Next one: ${fmtDay(addMonthsKeep(d, every))} ${addMonthsKeep(d, every).slice(0, 4)}`;
+    txt += times >= 2 ? ` · last one: ${fmtDay(addMonthsKeep(d, every * (times - 1)))} ${addMonthsKeep(d, every * (times - 1)).slice(0, 4)} (${times} in total, including this one)` : " · continues until you stop it";
+    $("repeat-hint").textContent = txt + ". Each one is created as a draft on its date for you to check and submit.";
+  }
+  $("f-type").addEventListener("change", () => updateRepeat(true));
+  ["f-repeat", "f-every", "f-times", "f-date"].forEach((id) => $(id).addEventListener("input", () => updateRepeat(false)));
+  $("f-repeat").addEventListener("change", () => updateRepeat(false));
+
+  async function loadRecurring() {
+    const { data, error } = await sb.from("recurring_billings")
+      .select("id, narrative, fee_amount, travel, car_hire, accommodation, interval_months, next_date, occurrences_total, occurrences_done, active, stopped_at, clients(name), work_types(name)")
+      .eq("consultant_id", state.user.id).order("active", { ascending: false }).order("next_date");
+    if (error) return;
+    const cutoff = new Date(Date.now() - 60 * 864e5).toISOString();
+    const list = (data || []).filter((r) => r.active || (r.stopped_at && r.stopped_at > cutoff));
+    $("recurring-card").hidden = !list.length;
+    $("recurring-table").innerHTML = list.length ? `<table class="grid"><thead><tr><th>Client</th><th>Description</th><th class="num">Amount</th><th>How often</th><th>Next</th><th>Progress</th><th></th></tr></thead><tbody>
+      ${list.map((r) => `<tr class="${r.active ? "" : "muted"}">
+        <td>${esc(r.clients?.name || "")}<span class="sub2">${esc(r.work_types?.name || "")}</span></td>
+        <td>${esc(r.narrative)}</td>
+        <td class="num">${money(Number(r.fee_amount) + Number(r.travel) + Number(r.car_hire) + Number(r.accommodation))}</td>
+        <td class="nowrap">${EVERY[r.interval_months] || r.interval_months + " months"}</td>
+        <td class="nowrap">${r.active ? esc(fmtDay(r.next_date)) + " " + r.next_date.slice(0, 4) : "Ended"}</td>
+        <td class="nowrap">${r.occurrences_total ? `${r.occurrences_done} of ${r.occurrences_total}` : `${r.occurrences_done} so far · ongoing`}</td>
+        <td class="row-actions">${r.active ? `<button class="link-btn danger" data-stop="${r.id}">Stop</button>` : ""}</td></tr>`).join("")}
+      </tbody></table>` : "";
+  }
+  $("recurring-table").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-stop]"); if (!b) return;
+    const ok = await confirmBox({ title: "Stop this repeating billing?", body: "No new drafts will be created. Billings already created stay as they are.", yes: "Stop repeating", danger: true });
+    if (!ok) return;
+    const { error } = await sb.rpc("stop_recurring", { p_id: Number(b.dataset.stop) });
+    if (error) return toast(friendlyError(error), "error");
+    toast("Repeating billing stopped"); loadRecurring();
+  });
+
   function defaultDate() {
     const t = todaySA();
     return t.slice(0, 7) === state.month.slice(0, 7) ? t : state.month;
@@ -560,6 +642,8 @@
     }
     state.splitsOriginal = JSON.stringify(state.editing ? state.splits : []);
     renderSplits();
+    $("f-repeat").checked = false; $("f-times").value = ""; $("repeat-opts").hidden = true;
+    updateRepeat(true);
     updateTotal();
     $("entry-modal").hidden = false;
     setTimeout(() => $(entry ? "f-narr" : "f-client").focus(), 30);
@@ -667,12 +751,25 @@
         }
       }
 
-      toast(state.editing ? "Entry updated" : "Entry saved as draft");
+      let repeatMsg = "";
+      if (!$("repeat-box").hidden && $("f-repeat").checked && !$("f-repeat").disabled) {
+        const times = $("f-times").value.trim() ? Number($("f-times").value) : null;
+        const rc = await sb.rpc("create_recurring", { p_entry_id: res.data.id, p_interval_months: Number($("f-every").value), p_times: times });
+        if (rc.error) {
+          state.editing = { ...(state.editing || {}), ...row, id: res.data.id, status: state.editing?.status || "draft" };
+          await loadMonth();
+          throw new Error("The entry was saved, but the repeat wasn't set up: " + rc.error.message);
+        }
+        repeatMsg = " · repeats " + $("f-every").selectedOptions[0].textContent.toLowerCase();
+      }
+
+      toast((state.editing ? "Entry updated" : "Entry saved as draft") + repeatMsg);
       const savedMonth = monthStart(row.work_date);
       if (addAnother) {
         // keep date, client, contact, area, type — clear the rest
         ["f-narr","f-hours","f-fee","f-travel","f-car","f-acc","f-comments"].forEach((id) => ($(id).value = ""));
         state.splits = []; state.splitsOriginal = "[]"; renderSplits();
+        $("f-repeat").checked = false; $("f-times").value = ""; updateRepeat(true);
         state.feeTouched = false; updateTotal(); $("f-narr").focus();
       } else closeEntry();
       if (savedMonth !== state.month && !addAnother) state.month = savedMonth;
@@ -749,36 +846,46 @@
   // =====================================================================
   // Export
   // =====================================================================
-  $("export-btn").addEventListener("click", () => {
+  $("export-btn").addEventListener("click", async () => {
     const rows = monthEntries();
     if (!rows.length) return toast("No entries this month to export.");
-    const data = rows.map((r) => ({
-      "Date": r.work_date,
-      "Consultant": r.consultant_name,
-      "Client": r.client_name,
-      "Invoice contact": r.invoice_contact || "",
-      "Service area": r.service_area,
-      "Type of work": r.work_type,
-      "Nature of work done": r.narrative,
-      "Hours": r.hours != null ? Number(r.hours) : "",
-      "Hourly rate": r.hourly_rate != null ? Number(r.hourly_rate) : "",
-      "Fee": Number(r.fee_amount),
-      "Travel": Number(r.travel),
-      "Car hire": Number(r.car_hire),
-      "Accommodation": Number(r.accommodation),
-      "Total excl. VAT": Number(r.total_excl_vat),
-      "VAT": Number(r.vat_amount),
-      "Total incl. VAT": round2(Number(r.total_excl_vat) + Number(r.vat_amount)),
-      "Comments": r.comments || "",
-      "Split": (r.splits || []).length ? `You ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
-      "Status": r.status,
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = [10, 18, 24, 22, 16, 22, 50, 7, 10, 12, 10, 10, 13, 14, 11, 14, 30, 28, 10].map((w) => ({ wch: w }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, fmtMonth(state.month).slice(0, 31));
-    const who = (state.profile.full_name || "me").replace(/[^\w]+/g, "_");
-    XLSX.writeFile(wb, `GBS_Billings_${who}_${state.month.slice(0, 7)}.xlsx`);
+    const who = state.profile.full_name || state.user.email;
+    try {
+      await GBSExport.xlsx({
+        filename: `GBS_Billings_${who.replace(/[^\w]+/g, "_")}_${state.month.slice(0, 7)}.xlsx`,
+        sheetName: fmtMonth(state.month),
+        title: `Billings · ${who}`,
+        subtitle: `${fmtMonth(state.month)} · ${rows.length} entries · amounts excl. VAT unless stated`,
+        totalKeys: ["hours", "fee", "travel", "car", "acc", "excl", "vat", "incl"],
+        columns: [
+          { header: "Date", key: "date", type: "date", width: 12 },
+          { header: "Client", key: "client", width: 22, wrap: true },
+          { header: "Invoice contact", key: "contact", width: 20, wrap: true },
+          { header: "Service area", key: "area", width: 15 },
+          { header: "Type of work", key: "type", width: 20, wrap: true },
+          { header: "Nature of work done", key: "narr", width: 46, wrap: true },
+          { header: "Hours", key: "hours", type: "number", width: 8 },
+          { header: "Rate", key: "rate", type: "money", width: 11 },
+          { header: "Fee", key: "fee", type: "money", width: 13 },
+          { header: "Travel", key: "travel", type: "money", width: 11 },
+          { header: "Car hire", key: "car", type: "money", width: 11 },
+          { header: "Accomm.", key: "acc", type: "money", width: 11 },
+          { header: "Total excl. VAT", key: "excl", type: "money", width: 14 },
+          { header: "VAT", key: "vat", type: "money", width: 12 },
+          { header: "Total incl. VAT", key: "incl", type: "money", width: 14 },
+          { header: "Split", key: "split", width: 22, wrap: true },
+          { header: "Comments", key: "comments", width: 28, wrap: true },
+          { header: "Status", key: "status", width: 11 },
+        ],
+        rows: rows.map((r) => ({
+          date: r.work_date, client: r.client_name, contact: r.invoice_contact || "", area: r.service_area, type: r.work_type,
+          narr: r.narrative, hours: r.hours, rate: r.hourly_rate, fee: r.fee_amount, travel: r.travel, car: r.car_hire, acc: r.accommodation,
+          excl: r.total_excl_vat, vat: r.vat_amount, incl: round2(Number(r.total_excl_vat) + Number(r.vat_amount)),
+          split: (r.splits || []).length ? `You ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
+          comments: r.comments || "", status: r.status.charAt(0).toUpperCase() + r.status.slice(1),
+        })),
+      });
+    } catch (err) { toast(friendlyError(err), "error"); }
   });
 
   // =====================================================================

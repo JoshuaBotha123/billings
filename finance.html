@@ -44,6 +44,7 @@
       <button data-tab="alerts">Alerts <span class="count" id="tab-alert-count" hidden>0</span></button>
       <button data-tab="people">People</button>
       <button data-tab="lists">Lists</button>
+      <button data-tab="audit" id="tab-audit-btn" hidden>Audit log</button>
       <button data-tab="settings" id="tab-settings-btn" hidden>Settings</button>
     </div>
 
@@ -161,8 +162,56 @@
       </div>
     </section>
 
+    <!-- ============ Audit log (finance / admin) ============ -->
+    <section id="tab-audit" hidden>
+      <div class="filters">
+        <select id="a-table">
+          <option value="">Everything</option>
+          <option value="billing_entries">Billings</option>
+          <option value="billing_splits">Split billings</option>
+          <option value="recurring_billings">Repeating billings</option>
+          <option value="profiles">People</option>
+          <option value="consultant_targets">Targets</option>
+        </select>
+        <select id="a-actor"><option value="">Anyone</option></select>
+        <select id="a-days">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last year</option>
+        </select>
+        <input type="search" id="a-search" placeholder="Search client, description, invoice no…">
+      </div>
+      <div class="panel-card"><div class="table-wrap" id="audit-table"><div class="empty">Loading…</div></div></div>
+      <p class="hint">Every change is recorded automatically and can't be edited or deleted from the website. "System" means an automatic action (for example a repeating billing being created).</p>
+    </section>
+
     <!-- ============ Settings (admin) ============ -->
     <section id="tab-settings" hidden>
+      <div class="panel-card">
+        <h3>Automatic emails</h3>
+        <div class="panel-body" style="padding-top:6px">
+          <div class="setting-row">
+            <div class="sr-text"><strong>Remind consultants on due days</strong><span>08:00 on the day a week or month-end is due, only to people who haven't submitted. Switch on once globalbusiness.co.za is verified in Resend — until then only you can receive emails.</span></div>
+            <label class="check-inline"><input type="checkbox" id="set-reminders"> On</label>
+            <button class="btn btn-ghost btn-sm" id="set-test-reminder">Send me a sample</button>
+          </div>
+          <div class="setting-row">
+            <div class="sr-text"><strong>Monthly summary</strong><span>Sent at 07:00 on the first working day after the month-end deadline: totals, each consultant vs target, who submitted late, and invoicing status.</span></div>
+            <label class="check-inline"><input type="checkbox" id="set-summary"> On</label>
+            <button class="btn btn-ghost btn-sm" id="set-send-summary">Send last month's now</button>
+          </div>
+          <div class="setting-row">
+            <div class="sr-text" style="flex:1 1 100%"><strong>Send the monthly summary to</strong>
+              <input id="set-summary-emails" placeholder="ceo@globalbusiness.co.za, joshua@globalbusiness.co.za" style="margin-top:8px"></div>
+          </div>
+          <div class="setting-row">
+            <div class="sr-text"><strong>Repeating billings</strong><span>Due drafts are created automatically every morning at 05:30. Use this to create any that are due right now.</span></div>
+            <button class="btn btn-ghost btn-sm" id="set-run-recurring">Create due billings now</button>
+          </div>
+          <div style="margin-top:14px"><button class="btn btn-primary" id="set-auto-save">Save</button></div>
+        </div>
+      </div>
       <div class="panel-card">
         <h3>Alert emails</h3>
         <div class="panel-body">
@@ -249,7 +298,10 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="brand-export.js"></script>
   <script src="config.js"></script>
   <script>
   // =====================================================================
@@ -341,6 +393,7 @@
     $("user-email").textContent = state.user.email;
     $("user-role").textContent = profile.role;
     $("tab-settings-btn").hidden = !isAdmin();
+    $("tab-audit-btn").hidden = !isFin();
     document.querySelectorAll(".admin-only").forEach((el) => (el.hidden = !isAdmin()));
     document.querySelectorAll(".fin-only").forEach((el) => (el.hidden = !isFin()));
     $("people-note").textContent = isAdmin() ? "" : "Only admins can change people's roles and access.";
@@ -414,10 +467,11 @@
   function showTab(tab) {
     state.tab = tab;
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-    ["subs", "inv", "alerts", "people", "lists", "settings"].forEach((t) => ($("tab-" + t).hidden = t !== tab));
+    ["subs", "inv", "alerts", "people", "lists", "audit", "settings"].forEach((t) => ($("tab-" + t).hidden = t !== tab));
     $("export-btn").hidden = !["subs", "inv"].includes(tab);
     history.replaceState(null, "", "#" + tab);
     if (tab === "settings") loadEmailStatus();
+    if (tab === "audit" && !state.auditLoaded) loadAudit();
   }
   $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
 
@@ -556,7 +610,8 @@
       const contacts = [...new Set(list.map((r) => r.invoice_contact).filter(Boolean))].join(" · ");
       html += `<tr class="group">
         <td>${isFin() && sel.length ? `<input type="checkbox" data-group="${esc(client)}" ${allOn ? "checked" : ""}>` : ""}</td>
-        <td colspan="7">${esc(client)} ${contacts ? `<span class="sub2">${esc(contacts)}</span>` : ""}</td>
+        <td colspan="7">${esc(client)} ${contacts ? `<span class="sub2">${esc(contacts)}</span>` : ""}
+          <button class="link-btn" data-pdf="${esc(client)}" style="float:right;margin-top:-2px" title="Download a branded billing statement for this client">⬇ PDF statement</button></td>
         <td class="num">${money(total(list, "total_excl_vat"))}</td><td class="num">${money(total(list, "vat_amount"))}</td><td></td></tr>`;
       for (const r of list) {
         const on = state.selected.has(String(r.id));
@@ -673,27 +728,144 @@
   // =====================================================================
   // Export
   // =====================================================================
-  $("export-btn").addEventListener("click", () => {
+  $("export-btn").addEventListener("click", async () => {
     const rows = state.tab === "inv" ? filteredRows() : monthRows();
     if (!rows.length) return toast("Nothing to export.");
-    const data = rows.map((r) => ({
-      "Date": r.work_date, "Consultant": r.consultant_name, "Client": r.client_name,
-      "Invoice contact": r.invoice_contact || "", "Service area": r.service_area, "Type of work": r.work_type,
-      "Nature of work done": r.narrative, "Hours": r.hours != null ? num(r.hours) : "", "Hourly rate": r.hourly_rate != null ? num(r.hourly_rate) : "",
-      "Fee": num(r.fee_amount), "Travel": num(r.travel), "Car hire": num(r.car_hire), "Accommodation": num(r.accommodation),
-      "Total excl. VAT": num(r.total_excl_vat), "VAT": num(r.vat_amount), "Total incl. VAT": round2(num(r.total_excl_vat) + num(r.vat_amount)),
-      "Comments": r.comments || "",
-      "Split": (r.splits || []).length ? `${r.consultant_name} ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
-      "Status": r.status, "Invoice no.": r.invoice_no || "",
-      "Invoice date": r.invoiced_at ? r.invoiced_at.slice(0, 10) : "", "Paid date": r.paid_at ? r.paid_at.slice(0, 10) : "",
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = [10, 18, 24, 22, 16, 22, 50, 7, 10, 12, 10, 10, 13, 14, 11, 14, 30, 28, 10, 14, 12, 12].map((w) => ({ wch: w }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Billings");
-    const label = state.tab === "inv" && $("f-period").value === "open" ? "open" : state.month.slice(0, 7);
-    XLSX.writeFile(wb, `GBS_Billings_All_${label}.xlsx`);
+    const open = state.tab === "inv" && $("f-period").value === "open";
+    const label = open ? "All months, not yet paid" : fmtMonth(state.month);
+    const parts = [];
+    if (state.tab === "inv") {
+      const st = $("f-status"); parts.push(st.selectedOptions[0].textContent);
+      if ($("f-consultant").value) parts.push($("f-consultant").selectedOptions[0].textContent);
+      if ($("f-client").value) parts.push($("f-client").selectedOptions[0].textContent);
+    }
+    try {
+      await GBSExport.xlsx({
+        filename: `GBS_Billings_All_${open ? "open" : state.month.slice(0, 7)}.xlsx`,
+        sheetName: open ? "Open billings" : fmtMonth(state.month),
+        title: "GBS billings · " + label,
+        subtitle: [`${rows.length} lines`, ...parts, "amounts excl. VAT unless stated"].join(" · "),
+        totalKeys: ["hours", "fee", "exp", "excl", "vat", "incl"],
+        columns: [
+          { header: "Date", key: "date", type: "date", width: 12 },
+          { header: "Consultant", key: "cons", width: 18 },
+          { header: "Client", key: "client", width: 22, wrap: true },
+          { header: "Invoice contact", key: "contact", width: 20, wrap: true },
+          { header: "Service area", key: "area", width: 14 },
+          { header: "Type of work", key: "type", width: 18, wrap: true },
+          { header: "Nature of work done", key: "narr", width: 44, wrap: true },
+          { header: "Hours", key: "hours", type: "number", width: 8 },
+          { header: "Fee", key: "fee", type: "money", width: 13 },
+          { header: "Expenses", key: "exp", type: "money", width: 12 },
+          { header: "Total excl. VAT", key: "excl", type: "money", width: 14 },
+          { header: "VAT", key: "vat", type: "money", width: 12 },
+          { header: "Total incl. VAT", key: "incl", type: "money", width: 14 },
+          { header: "Split", key: "split", width: 24, wrap: true },
+          { header: "Comments", key: "comments", width: 26, wrap: true },
+          { header: "Status", key: "status", width: 11 },
+          { header: "Invoice no.", key: "inv", width: 14 },
+          { header: "Invoice date", key: "invd", type: "date", width: 12 },
+          { header: "Paid date", key: "paid", type: "date", width: 12 },
+        ],
+        rows: [...rows].sort((a, b) => a.client_name.localeCompare(b.client_name) || a.work_date.localeCompare(b.work_date)).map((r) => ({
+          date: r.work_date, cons: r.consultant_name, client: r.client_name, contact: r.invoice_contact || "", area: r.service_area, type: r.work_type,
+          narr: r.narrative, hours: r.hours, fee: r.fee_amount, exp: num(r.travel) + num(r.car_hire) + num(r.accommodation),
+          excl: r.total_excl_vat, vat: r.vat_amount, incl: round2(num(r.total_excl_vat) + num(r.vat_amount)),
+          split: (r.splits || []).length ? `${r.consultant_name} ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
+          comments: r.comments || "", status: r.status.charAt(0).toUpperCase() + r.status.slice(1),
+          inv: r.invoice_no || "", invd: r.invoiced_at ? r.invoiced_at.slice(0, 10) : "", paid: r.paid_at ? r.paid_at.slice(0, 10) : "",
+        })),
+      });
+    } catch (err) { toast(errText(err), "error"); }
   });
+
+  // ---- Client PDF statement (from the Invoicing tab)
+  $("inv-table").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-pdf]"); if (!b) return;
+    const client = b.dataset.pdf;
+    const rows = filteredRows().filter((r) => r.client_name === client).sort((a, z) => a.work_date.localeCompare(z.work_date));
+    if (!rows.length) return;
+    const open = $("f-period").value === "open";
+    const fmtD = (d) => parseD(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    const period = open ? `${fmtD(rows[0].work_date)} – ${fmtD(rows[rows.length - 1].work_date)}` : fmtMonth(state.month);
+    try {
+      await GBSExport.clientStatement({
+        filename: `GBS_Statement_${client.replace(/[^\w]+/g, "_")}_${open ? "open" : state.month.slice(0, 7)}.pdf`,
+        client, period, vatRate: state.vatRate,
+        contact: [...new Set(rows.map((r) => r.invoice_contact).filter(Boolean))].join(", "),
+        invoiceNos: [...new Set(rows.map((r) => r.invoice_no).filter(Boolean))],
+        rows: rows.map((r) => ({ work_date: r.work_date, consultant: r.consultant_name, service: r.service_area, narrative: r.narrative,
+          hours: r.hours, fee: r.fee_amount, expenses: num(r.travel) + num(r.car_hire) + num(r.accommodation), total: r.total_excl_vat })),
+      });
+    } catch (err) { toast(errText(err), "error"); }
+  });
+
+  // =====================================================================
+  // Audit log
+  // =====================================================================
+  const AUDIT_TABLE = { billing_entries: "Billing", billing_splits: "Split", recurring_billings: "Repeating billing", profiles: "Person", consultant_targets: "Target", clients: "Client" };
+  const AUDIT_ACTION = { INSERT: "Created", UPDATE: "Changed", DELETE: "Deleted" };
+  const FIELD = { work_date: "date", client_id: "client", narrative: "description", fee_amount: "fee", hours: "hours", hourly_rate: "rate", travel: "travel",
+    car_hire: "car hire", accommodation: "accommodation", comments: "comments", status: "status", invoice_no: "invoice no.", invoice_contact: "invoice contact",
+    service_area_id: "service area", work_type_id: "type of work", role: "role", active: "active", submits_billings: "submits billings", full_name: "name",
+    target_amount: "target", share_pct: "share %", paid_at: "paid date", invoiced_at: "invoice date", next_date: "next date", interval_months: "every (months)", occurrences_total: "times" };
+  const SKIP = new Set(["updated_at", "submitted_at", "created_at", "total_excl_vat", "period_month", "week_of_month", "last_generated_at", "occurrences_done"]);
+
+  function auditValue(k, v) {
+    if (v === null || v === undefined || v === "") return "—";
+    if (k === "client_id") return state.clients.find((c) => c.id === v)?.name || v;
+    if (k === "service_area_id") return state.areas.find((a) => a.id === v)?.name || v;
+    if (k === "work_type_id") return state.types.find((t) => t.id === v)?.name || v;
+    if (k === "consultant_id") return personName(v);
+    if (["fee_amount", "travel", "car_hire", "accommodation", "target_amount", "hourly_rate"].includes(k)) return money(v);
+    if (/_at$/.test(k)) return fmtWhen(v);
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    const s = String(v); return s.length > 70 ? s.slice(0, 69) + "…" : s;
+  }
+  const personName = (id) => !id ? "System" : (state.people.find((p) => p.id === id)?.full_name || state.people.find((p) => p.id === id)?.email || "Unknown");
+
+  function auditSubject(a) {
+    const d = a.new_data || a.old_data || {};
+    if (a.table_name === "billing_entries") return `${state.clients.find((c) => c.id === d.client_id)?.name || "Client"} · ${d.work_date ? fmtDay(d.work_date) : ""} · ${d.narrative ? (d.narrative.length > 50 ? d.narrative.slice(0, 49) + "…" : d.narrative) : ""}`;
+    if (a.table_name === "profiles") return d.full_name || d.email || "";
+    if (a.table_name === "consultant_targets") return `${personName(d.consultant_id)} · ${d.year}`;
+    if (a.table_name === "billing_splits") return `${personName(d.consultant_id)} · ${d.share_pct}% of billing #${d.entry_id}`;
+    if (a.table_name === "recurring_billings") return d.narrative || "";
+    return a.row_id || "";
+  }
+  function auditChanges(a) {
+    if (a.action !== "UPDATE") return "";
+    const o = a.old_data || {}, n = a.new_data || {};
+    const keys = Object.keys(n).filter((k) => !SKIP.has(k) && JSON.stringify(o[k]) !== JSON.stringify(n[k]));
+    if (!keys.length) return `<span class="diff">no visible change</span>`;
+    return keys.slice(0, 6).map((k) => `<span class="diff"><b>${esc(FIELD[k] || k.replace(/_/g, " "))}</b>: <span class="old">${esc(auditValue(k, o[k]))}</span> → <span class="new">${esc(auditValue(k, n[k]))}</span></span>`).join("<br>");
+  }
+
+  async function loadAudit() {
+    state.auditLoaded = true;
+    $("a-actor").innerHTML = `<option value="">Anyone</option>` + state.people.map((p) => `<option value="${p.id}">${esc(p.full_name || p.email)}</option>`).join("") + `<option value="system">System (automatic)</option>`;
+    $("audit-table").innerHTML = `<div class="empty">Loading…</div>`;
+    const since = new Date(Date.now() - Number($("a-days").value) * 864e5).toISOString();
+    let q = sb.from("audit_log").select("*").gte("at", since).order("at", { ascending: false }).limit(500);
+    if ($("a-table").value) q = q.eq("table_name", $("a-table").value);
+    if ($("a-actor").value === "system") q = q.is("actor_id", null);
+    else if ($("a-actor").value) q = q.eq("actor_id", $("a-actor").value);
+    const { data, error } = await q;
+    if (error) { $("audit-table").innerHTML = `<div class="empty">Could not load the audit log: ${esc(errText(error))}</div>`; return; }
+    state.audit = data || [];
+    renderAudit();
+  }
+  function renderAudit() {
+    const qtext = $("a-search").value.trim().toLowerCase();
+    const list = state.audit.filter((a) => !qtext || (auditSubject(a) + " " + JSON.stringify(a.new_data || a.old_data || {})).toLowerCase().includes(qtext));
+    $("audit-table").innerHTML = list.length ? `<table class="grid"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Item</th><th>Changes</th></tr></thead><tbody>
+      ${list.map((a) => `<tr><td class="nowrap">${esc(fmtWhen(a.at))}</td><td class="nowrap">${esc(personName(a.actor_id))}</td>
+        <td class="nowrap"><span class="pill ${a.action === "DELETE" ? "late" : a.action === "INSERT" ? "ok" : ""}">${AUDIT_ACTION[a.action] || a.action}</span><span class="sub2">${esc(AUDIT_TABLE[a.table_name] || a.table_name)}</span></td>
+        <td style="min-width:220px">${esc(auditSubject(a))}</td><td style="min-width:240px">${auditChanges(a)}</td></tr>`).join("")}
+      </tbody></table>${state.audit.length === 500 ? `<div class="empty">Showing the latest 500 changes — narrow the filters to see older ones.</div>` : ""}` : `<div class="empty">No changes match these filters.</div>`;
+  }
+  ["a-table", "a-actor", "a-days"].forEach((id) => $(id).addEventListener("change", loadAudit));
+  $("a-search").addEventListener("input", renderAudit);
 
   // =====================================================================
   // Alerts
@@ -839,6 +1011,9 @@
     $("set-alert-emails").value = state.settings.alert_emails || "";
     $("set-alert-from").value = state.settings.alert_from || "";
     $("set-app-url").value = state.settings.app_url || "";
+    $("set-reminders").checked = state.settings.reminders_enabled === "true";
+    $("set-summary").checked = state.settings.summary_enabled !== "false";
+    $("set-summary-emails").value = state.settings.summary_emails || "";
     $("holidays-table").innerHTML = state.holidays.length ? `<table class="grid"><thead><tr><th>Date</th><th>Holiday</th><th></th></tr></thead><tbody>
       ${state.holidays.map((h) => `<tr class="${h.holiday_date < todaySA() ? "muted" : ""}"><td class="nowrap">${esc(fmtDay(h.holiday_date))} ${h.holiday_date.slice(0, 4)}</td><td>${esc(h.name)}</td>
         <td class="row-actions"><button class="link-btn danger" data-del-holiday="${h.holiday_date}">Remove</button></td></tr>`).join("")}
@@ -861,6 +1036,37 @@
     $("email-recent").innerHTML = failed.length ? `<p class="hint" style="margin-top:14px">Recent errors:</p>` + failed.map((r) =>
       `<div class="hint" style="font-family:ui-monospace,Consolas,monospace;background:#FAFAFC;padding:8px 10px;border-radius:8px;margin-top:6px">${esc(fmtWhen(r.created))} · ${esc(r.status_code || "")} ${esc(r.error_msg || r.content || "")}</div>`).join("") : "";
   }
+
+  $("set-auto-save").onclick = async () => {
+    const emails = $("set-summary-emails").value.trim();
+    const bad = emails.split(",").map((x) => x.trim()).filter(Boolean).filter((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    if (bad.length) return toast("Check these email addresses: " + bad.join(", "), "error");
+    const updates = { reminders_enabled: String($("set-reminders").checked), summary_enabled: String($("set-summary").checked), summary_emails: emails };
+    for (const [key, value] of Object.entries(updates)) {
+      const { error } = await sb.from("app_settings").update({ value }).eq("key", key);
+      if (error) return toast(errText(error), "error");
+    }
+    await loadSettings(); toast("Saved");
+  };
+  $("set-test-reminder").onclick = async () => {
+    const { error } = await sb.rpc("send_consultant_reminders", { p_test: true });
+    if (error) return toast(errText(error), "error");
+    toast("Sample reminder sent to you"); setTimeout(loadEmailStatus, 4000);
+  };
+  $("set-send-summary").onclick = async () => {
+    const prev = addMonths(monthStart(todaySA()), -1);
+    const ok = await confirmBox({ title: `Send the ${fmtMonth(prev)} summary now?`, body: `It goes to: <strong>${esc(state.settings.summary_emails || "nobody yet — add addresses first")}</strong>. Click Save first if you just changed the list.`, yes: "Send summary" });
+    if (!ok) return;
+    const { error } = await sb.rpc("send_monthly_summary", { p_month: prev, p_force: true });
+    if (error) return toast(errText(error), "error");
+    toast("Summary sent"); setTimeout(loadEmailStatus, 4000);
+  };
+  $("set-run-recurring").onclick = async () => {
+    const { data, error } = await sb.rpc("generate_recurring_billings");
+    if (error) return toast(errText(error), "error");
+    toast(data ? `${data} repeating billing${data > 1 ? "s" : ""} created` : "Nothing due right now");
+    if (data) loadMonth();
+  };
 
   $("set-save").onclick = async () => {
     const updates = { alert_emails: $("set-alert-emails").value.trim(), alert_from: $("set-alert-from").value.trim(), app_url: $("set-app-url").value.trim() };

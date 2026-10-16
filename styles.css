@@ -340,3 +340,16 @@ body.st-none  { --st: var(--gbs-blue); --st-soft: var(--gbs-blue-soft); }
   .hero .big { font-size: 38px; }
   .hero-facts { grid-template-columns: repeat(2, auto); }
 }
+
+/* ---------- Step 8 ---------- */
+.repeat-box { background: var(--gbs-blue-soft); border-radius: 12px; padding: 14px 16px; margin-top: 16px; }
+.repeat-box label { margin-top: 10px; }
+.diff { font-size: 12px; color: var(--ink-2); }
+.diff b { font-weight: 600; }
+.diff .old { color: var(--danger); text-decoration: line-through; }
+.diff .new { color: var(--ok); }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.setting-row:last-child { border-bottom: 0; }
+.setting-row .sr-text { flex: 1 1 320px; }
+.setting-row .sr-text strong { display: block; font-size: 14px; }
+.setting-row .sr-text span { font-size: 12px; color: var(--muted); }
