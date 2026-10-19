@@ -100,7 +100,7 @@
     <!-- Company only -->
     <section id="company-only" hidden>
       <div class="panel-card">
-        <h3>Consultants <span class="spacer"></span><span class="note">Each person is credited only with their share of split billings. Click a name to open their dashboard.</span></h3>
+        <h3>Consultants <span class="spacer"></span><span class="note">Ranked by fees billed so far. Each person is credited only with their share of split billings. Click a name to open their dashboard.</span></h3>
         <div class="table-wrap" id="league"></div>
       </div>
       <div class="panel-card" id="targets-card">
@@ -508,13 +508,14 @@
       const target = targetFor(y, p.id), proj = project(cur, ly, y), st = statusOf(proj.value, target);
       const ytd = sum(cur), upto = isCur ? curM : 11, lySame = sum(ly.slice(0, upto + 1)), ytdSame = sum(cur.slice(0, upto + 1));
       return { p, ytd, target, proj: proj.value, st, ratio: target ? proj.value / target : -1, lySame, ytdSame };
-    }).sort((a, b) => b.ratio - a.ratio || b.ytd - a.ytd);
+    }).sort((a, b) => b.ytd - a.ytd || b.ratio - a.ratio);   // top billers first
     if (!lines.length) { $("league").innerHTML = `<div class="empty">No consultants yet.</div>`; return; }
     const colour = { good: C.good, close: C.close, bad: C.bad, none: C.ly };
     $("league").innerHTML = `<table class="grid"><thead><tr>
-      <th>Consultant</th><th class="num">Target ${y}</th><th class="num">Billed so far</th><th>Progress</th>
+      <th>#</th><th>Consultant</th><th class="num">Target ${y}</th><th class="num">Billed so far ▼</th><th>Progress</th>
       <th class="num">Projected</th><th>Status</th><th class="num">vs ${y - 1}</th></tr></thead><tbody>
-      ${lines.map((l) => `<tr class="${l.p.active ? "" : "muted"}">
+      ${lines.map((l, i) => `<tr class="${l.p.active ? "" : "muted"}">
+        <td class="num" style="color:var(--muted)">${i + 1}</td>
         <td><a href="#" class="name-link" data-view="${l.p.id}">${esc(l.p.full_name || l.p.email)}</a></td>
         <td class="num">${l.target ? money(l.target) : `<span class="note">not set</span>`}</td>
         <td class="num">${money(l.ytd)}</td>

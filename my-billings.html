@@ -45,13 +45,18 @@
     <div id="banner"></div>
 
     <section class="tiles">
-      <div class="tile"><div class="k">Month total</div><div class="v" id="t-total">—</div><div class="s">excl. VAT · <span id="t-count">0</span> entries</div></div>
-      <div class="tile"><div class="k">Fees</div><div class="v" id="t-fees">—</div><div class="s"><span id="t-hours">0</span> hours logged</div></div>
+      <div class="tile"><div class="k">Your billings this month</div><div class="v" id="t-total">—</div><div class="s" id="t-total-s">excl. VAT · <span id="t-count">0</span> entries</div></div>
+      <div class="tile"><div class="k">Your fees</div><div class="v" id="t-fees">—</div><div class="s"><span id="t-hours">0</span> hours logged</div></div>
       <div class="tile"><div class="k">Expenses</div><div class="v" id="t-exp">—</div><div class="s">travel, car hire, accommodation</div></div>
       <div class="tile" id="t-next-tile"><div class="k">Next deadline</div><div class="v" id="t-next">—</div><div class="s" id="t-next-s">&nbsp;</div></div>
     </section>
 
     <div id="weeks"><div class="empty">Loading…</div></div>
+
+    <section class="panel-card" id="shared-card" hidden style="margin-top:8px">
+      <h3>🤝 Shared with you by colleagues <span class="spacer"></span><span class="note" style="font-weight:400">Captured and submitted by the colleague — shown here so you can see your share. Nothing to do.</span></h3>
+      <div class="table-wrap" id="shared-table"></div>
+    </section>
 
     <section class="panel-card" id="recurring-card" hidden style="margin-top:8px">
       <h3>🔁 Repeating billings <span class="spacer"></span><span class="note" style="font-weight:400">A new draft is created automatically on each date — check it and submit as usual.</span></h3>
@@ -348,6 +353,8 @@
     state.entries = e.data || [];
     loadRecurring();
     state.subs = s.data || [];
+    const sh = await sb.rpc("shared_with_me", { p_from: from, p_to: to });
+    state.shared = sh.error ? [] : (sh.data || []);
     render();
   }
 
@@ -367,12 +374,21 @@
     const mine = monthEntries();
     const fin = finalSub();
 
-    // Tiles
-    $("t-total").textContent = money(sum(mine, "total_excl_vat"));
+    // Tiles: your share only (split billings count only your %; billings colleagues shared with you are added)
+    const sharedMonth = (state.shared || []).filter((x) => x.work_date.slice(0, 7) === state.month.slice(0, 7));
+    const myPct = (r) => Number(r.owner_share_pct ?? 100) / 100;
+    const shareOf = (f) => mine.reduce((a, r) => a + Number(r[f] || 0) * myPct(r), 0);
+    const capturedTotal = sum(mine, "total_excl_vat");
+    const myTotal = shareOf("total_excl_vat") + sharedMonth.reduce((a, x) => a + Number(x.share_total), 0);
+    $("t-total").textContent = money(myTotal);
     $("t-count").textContent = mine.length;
-    $("t-fees").textContent  = money(sum(mine, "fee_amount"));
+    $("t-total-s").innerHTML = round2(myTotal) !== round2(capturedTotal)
+      ? `excl. VAT · your share · you captured ${money(capturedTotal)} in ${mine.length} entr${mine.length === 1 ? "y" : "ies"}`
+      : `excl. VAT · ${mine.length} entr${mine.length === 1 ? "y" : "ies"}`;
+    $("t-fees").textContent  = money(shareOf("fee_amount") + sharedMonth.reduce((a, x) => a + Number(x.share_fee), 0));
     $("t-hours").textContent = round2(sum(mine, "hours"));
     $("t-exp").textContent   = money(sum(mine, "travel") + sum(mine, "car_hire") + sum(mine, "accommodation"));
+    renderShared(sharedMonth);
 
     // Next deadline tile: earliest week (up to the current one) that still needs submitting
     const weeks = weeksOfMonth(state.month);
@@ -496,11 +512,11 @@
         <td class="nowrap">${esc(fmtDay(r.work_date))}</td>
         <td>${esc(r.client_name)}${r.invoice_contact ? `<span class="sub2">${esc(r.invoice_contact)}</span>` : ""}</td>
         <td>${esc(r.service_area)}<span class="sub2">${esc(r.work_type)}</span></td>
-        <td class="narr">${esc(r.narrative)}${r.recurring_id ? ` <span title="Repeating billing" aria-label="Repeating billing">🔁</span>` : ""}${r.comments ? `<small>💬 ${esc(r.comments)}</small>` : ""}${(r.splits || []).length ? `<small>🤝 You ${Number(r.owner_share_pct)}% · ${r.splits.map((x) => `${esc(x.name)} ${Number(x.share_pct)}%`).join(" · ")}</small>` : ""}</td>
+        <td class="narr">${esc(r.narrative)}${r.recurring_id ? ` <span title="Repeating billing" aria-label="Repeating billing">🔁</span>` : ""}${r.comments ? `<small>💬 ${esc(r.comments)}</small>` : ""}${(r.splits || []).length ? `<small>🤝 You ${money(Number(r.total_excl_vat) * Number(r.owner_share_pct) / 100)} (${Number(r.owner_share_pct)}%) · ${r.splits.map((x) => `${esc(x.name)} ${money(Number(r.total_excl_vat) * Number(x.share_pct) / 100)} (${Number(x.share_pct)}%)`).join(" · ")}</small>` : ""}</td>
         <td class="num">${r.hours != null ? round2(r.hours) : "—"}</td>
         <td class="num">${money(r.fee_amount)}</td>
         <td class="num">${exp ? money(exp) : "—"}</td>
-        <td class="num"><strong>${money(r.total_excl_vat)}</strong></td>
+        <td class="num"><strong>${money(r.total_excl_vat)}</strong>${(r.splits || []).length ? `<span class="sub2">your share ${money(Number(r.total_excl_vat) * Number(r.owner_share_pct) / 100)}</span>` : ""}</td>
         <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
         <td class="row-actions">${actions}</td>
       </tr>`;
@@ -601,6 +617,18 @@
     if (error) return toast(friendlyError(error), "error");
     toast("Repeating billing stopped"); loadRecurring();
   });
+
+  function renderShared(list) {
+    $("shared-card").hidden = !list.length;
+    if (!list.length) return;
+    $("shared-table").innerHTML = `<table class="grid"><thead><tr><th>Date</th><th>Client</th><th>Captured by</th><th>Nature of work</th>
+      <th class="num">Billing total</th><th class="num">Your share</th><th>Status</th></tr></thead><tbody>
+      ${list.map((x) => `<tr><td class="nowrap">${esc(fmtDay(x.work_date))}</td><td>${esc(x.client_name)}<span class="sub2">${esc(x.service_area)}</span></td>
+        <td>${esc(x.captured_by)}</td><td>${esc(x.narrative)}</td><td class="num">${money(x.total_excl_vat)}</td>
+        <td class="num"><strong>${money(x.share_total)}</strong><span class="sub2">${Number(x.share_pct)}%</span></td>
+        <td><span class="pill ${esc(x.status)}">${esc(x.status)}</span></td></tr>`).join("")}
+      </tbody><tfoot><tr><td colspan="5">Your share of shared billings</td><td class="num">${money(list.reduce((a, x) => a + Number(x.share_total), 0))}</td><td></td></tr></tfoot></table>`;
+  }
 
   function defaultDate() {
     const t = todaySA();
@@ -856,7 +884,7 @@
         sheetName: fmtMonth(state.month),
         title: `Billings · ${who}`,
         subtitle: `${fmtMonth(state.month)} · ${rows.length} entries · amounts excl. VAT unless stated`,
-        totalKeys: ["hours", "fee", "travel", "car", "acc", "excl", "vat", "incl"],
+        totalKeys: ["hours", "fee", "travel", "car", "acc", "excl", "vat", "incl", "myshare"],
         columns: [
           { header: "Date", key: "date", type: "date", width: 12 },
           { header: "Client", key: "client", width: 22, wrap: true },
@@ -873,7 +901,9 @@
           { header: "Total excl. VAT", key: "excl", type: "money", width: 14 },
           { header: "VAT", key: "vat", type: "money", width: 12 },
           { header: "Total incl. VAT", key: "incl", type: "money", width: 14 },
-          { header: "Split", key: "split", width: 22, wrap: true },
+          { header: "Your share %", key: "mypct", type: "number", width: 9 },
+          { header: "Your share excl. VAT", key: "myshare", type: "money", width: 15 },
+          { header: "Split allocation", key: "split", width: 30, wrap: true },
           { header: "Comments", key: "comments", width: 28, wrap: true },
           { header: "Status", key: "status", width: 11 },
         ],
@@ -881,7 +911,8 @@
           date: r.work_date, client: r.client_name, contact: r.invoice_contact || "", area: r.service_area, type: r.work_type,
           narr: r.narrative, hours: r.hours, rate: r.hourly_rate, fee: r.fee_amount, travel: r.travel, car: r.car_hire, acc: r.accommodation,
           excl: r.total_excl_vat, vat: r.vat_amount, incl: round2(Number(r.total_excl_vat) + Number(r.vat_amount)),
-          split: (r.splits || []).length ? `You ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
+          mypct: Number(r.owner_share_pct ?? 100), myshare: round2(Number(r.total_excl_vat) * Number(r.owner_share_pct ?? 100) / 100),
+          split: (r.splits || []).length ? [`You ${money(Number(r.total_excl_vat) * Number(r.owner_share_pct) / 100)} (${Number(r.owner_share_pct)}%)`, ...r.splits.map((x) => `${x.name} ${money(Number(r.total_excl_vat) * Number(x.share_pct) / 100)} (${Number(x.share_pct)}%)`)].join("\n") : "",
           comments: r.comments || "", status: r.status.charAt(0).toUpperCase() + r.status.slice(1),
         })),
       });

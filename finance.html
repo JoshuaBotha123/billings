@@ -40,7 +40,7 @@
 
     <div class="tabs" id="tabs">
       <button data-tab="subs" class="active">Submissions</button>
-      <button data-tab="inv">Invoicing</button>
+      <button data-tab="inv" id="tab-inv-btn">Invoicing</button>
       <button data-tab="alerts">Alerts <span class="count" id="tab-alert-count" hidden>0</span></button>
       <button data-tab="people">People</button>
       <button data-tab="lists">Lists</button>
@@ -52,8 +52,8 @@
     <section id="tab-subs">
       <section class="tiles">
         <div class="tile"><div class="k">Billed this month</div><div class="v" id="s-total">—</div><div class="s" id="s-total-s">excl. VAT</div></div>
-        <div class="tile"><div class="k">To invoice</div><div class="v" id="s-toinv">—</div><div class="s">submitted, not yet invoiced</div></div>
-        <div class="tile"><div class="k">Invoiced, unpaid</div><div class="v" id="s-inv">—</div><div class="s" id="s-paid">paid R 0.00</div></div>
+        <div class="tile"><div class="k" id="s-toinv-k">To invoice</div><div class="v" id="s-toinv">—</div><div class="s" id="s-toinv-s">submitted, not yet invoiced</div></div>
+        <div class="tile"><div class="k" id="s-inv-k">Invoiced, unpaid</div><div class="v" id="s-inv">—</div><div class="s" id="s-paid">paid R 0.00</div></div>
         <div class="tile" id="s-missing-tile"><div class="k">Missing submissions</div><div class="v" id="s-missing">—</div><div class="s" id="s-missing-s">&nbsp;</div></div>
       </section>
       <div class="panel-card">
@@ -343,6 +343,17 @@
     invMode: null,
   };
   const isAdmin = () => state.role === "admin";
+  // Invoicing (mark invoiced / paid, client PDF statements) is switched off for now at finance's request.
+  // Set to true to bring it back — nothing else needs to change.
+  const INVOICING = false;
+  // Split billings: who is credited with how much of a line (rand, excl. VAT)
+  function allocation(r) {
+    const tot = num(r.total_excl_vat);
+    const own = Number(r.owner_share_pct ?? 100);
+    return [{ id: r.consultant_id, name: r.consultant_name, pct: own, amount: round2(tot * own / 100) },
+            ...(r.splits || []).map((x) => ({ id: x.consultant_id, name: x.name, pct: Number(x.share_pct), amount: round2(tot * Number(x.share_pct) / 100) }))];
+  }
+  const allocationText = (r) => allocation(r).map((a) => `${a.name} ${money(a.amount)} (${a.pct}%)`).join(" · ");
   const isFin   = () => state.role === "admin" || state.role === "finance";
 
   // ---- Deadlines (same rules as the database)
@@ -394,6 +405,15 @@
     $("user-role").textContent = profile.role;
     $("tab-settings-btn").hidden = !isAdmin();
     $("tab-audit-btn").hidden = !isFin();
+    if (!INVOICING) {
+      $("tab-inv-btn").textContent = "All billings";
+      $("f-status").innerHTML = `<option value="all">All statuses</option><option value="toinv">Submitted / final</option><option value="draft">Drafts (not submitted)</option>`;
+      $("f-period").innerHTML = `<option value="month">This month</option>`;
+      $("f-search").placeholder = "Search client, description, consultant…";
+      $("action-bar").remove();
+      $("s-toinv-k").textContent = "Submitted"; $("s-toinv-s").textContent = "submitted or month-end final";
+      $("s-inv-k").textContent = "Not yet submitted";
+    }
     document.querySelectorAll(".admin-only").forEach((el) => (el.hidden = !isAdmin()));
     document.querySelectorAll(".fin-only").forEach((el) => (el.hidden = !isFin()));
     $("people-note").textContent = isAdmin() ? "" : "Only admins can change people's roles and access.";
@@ -516,9 +536,22 @@
     const sumBy = (arr, f) => arr.reduce((a, r) => a + num(r[f]), 0);
     $("s-total").textContent = money(sumBy(rows, "total_excl_vat"));
     $("s-total-s").textContent = `excl. VAT · ${rows.length} entries`;
-    $("s-toinv").textContent = money(sumBy(rows.filter((r) => r.status === "submitted" || r.status === "final"), "total_excl_vat"));
-    $("s-inv").textContent = money(sumBy(rows.filter((r) => r.status === "invoiced"), "total_excl_vat"));
-    $("s-paid").textContent = "paid " + money(sumBy(rows.filter((r) => r.status === "paid"), "total_excl_vat"));
+    if (INVOICING) {
+      $("s-toinv").textContent = money(sumBy(rows.filter((r) => r.status === "submitted" || r.status === "final"), "total_excl_vat"));
+      $("s-inv").textContent = money(sumBy(rows.filter((r) => r.status === "invoiced"), "total_excl_vat"));
+      $("s-paid").textContent = "paid " + money(sumBy(rows.filter((r) => r.status === "paid"), "total_excl_vat"));
+    } else {
+      const drafts = rows.filter((r) => r.status === "draft");
+      $("s-toinv").textContent = money(sumBy(rows.filter((r) => r.status !== "draft"), "total_excl_vat"));
+      $("s-inv").textContent = money(sumBy(drafts, "total_excl_vat"));
+      $("s-paid").textContent = `${drafts.length} draft line${drafts.length === 1 ? "" : "s"} still to be submitted`;
+    }
+    // Each consultant is credited with their share of split billings (so nothing is double counted)
+    const credit = {};
+    rows.forEach((r) => allocation(r).forEach((a) => {
+      credit[a.id] = credit[a.id] || { amount: 0, lines: 0 };
+      credit[a.id].amount += a.amount; credit[a.id].lines += 1;
+    }));
 
     const weeks = weeksOfMonth(state.month);
     const people = billers();
@@ -527,14 +560,14 @@
       const cells = weeks.map((we) => weekCell(p, we, now, today));
       const mcell = monthCell(p, now, today);
       missing += [...cells, mcell].filter((c) => c.includes("st missing")).length;
-      const mine = rows.filter((r) => r.consultant_id === p.id);
+      const cr = credit[p.id] || { amount: 0, lines: 0 };
       return `<tr>
         <td><a href="#" class="name-link" data-person="${p.id}">${esc(p.full_name || p.email)}</a>
             ${p.email_confirmed_at ? "" : `<span class="sub2">email not confirmed</span>`}</td>
         ${cells.map((c) => `<td>${c}</td>`).join("")}
         <td>${mcell}</td>
-        <td class="num">${mine.length}</td>
-        <td class="num">${money(sumBy(mine, "total_excl_vat"))}</td>
+        <td class="num">${cr.lines}</td>
+        <td class="num">${money(cr.amount)}</td>
       </tr>`;
     }).join("");
     $("s-missing").textContent = missing;
@@ -545,7 +578,7 @@
       <table class="grid">
         <thead><tr><th>Consultant</th>
           ${weeks.map((we) => `<th title="Due ${esc(fmtDay(weekDue(we)))} ${state.deadlineTime}">Wk ending ${esc(fmtShort(we))}</th>`).join("")}
-          <th>Month-end</th><th class="num">Entries</th><th class="num">Total excl. VAT</th></tr></thead>
+          <th>Month-end</th><th class="num">Lines</th><th class="num" title="Each person's share of split billings">Their share excl. VAT</th></tr></thead>
         <tbody>${body}</tbody>
       </table>` : `<div class="empty">No one is set to submit billings yet. Tick “Submits billings” under People.</div>`;
   }
@@ -596,11 +629,11 @@
     const groups = new Map();
     rows.forEach((r) => { if (!groups.has(r.client_name)) groups.set(r.client_name, []); groups.get(r.client_name).push(r); });
     const sorted = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const selectable = (r) => isFin() && r.status !== "draft";
+    const selectable = (r) => INVOICING && isFin() && r.status !== "draft";
     const total = (arr, f) => arr.reduce((a, r) => a + num(r[f]), 0);
 
     let html = `<table class="grid"><thead><tr>
-      <th>${isFin() ? `<input type="checkbox" id="sel-all" title="Select all">` : ""}</th>
+      <th>${INVOICING && isFin() ? `<input type="checkbox" id="sel-all" title="Select all">` : ""}</th>
       <th>Date</th><th>Consultant</th><th>Service / type</th><th>Nature of work</th>
       <th class="num">Hours</th><th class="num">Fee</th><th class="num">Expenses</th>
       <th class="num">Excl. VAT</th><th class="num">VAT</th><th>Status</th></tr></thead><tbody>`;
@@ -611,7 +644,7 @@
       html += `<tr class="group">
         <td>${isFin() && sel.length ? `<input type="checkbox" data-group="${esc(client)}" ${allOn ? "checked" : ""}>` : ""}</td>
         <td colspan="7">${esc(client)} ${contacts ? `<span class="sub2">${esc(contacts)}</span>` : ""}
-          <button class="link-btn" data-pdf="${esc(client)}" style="float:right;margin-top:-2px" title="Download a branded billing statement for this client">⬇ PDF statement</button></td>
+          ${INVOICING ? `<button class="link-btn" data-pdf="${esc(client)}" style="float:right;margin-top:-2px" title="Download a branded billing statement for this client">⬇ PDF statement</button>` : ""}</td>
         <td class="num">${money(total(list, "total_excl_vat"))}</td><td class="num">${money(total(list, "vat_amount"))}</td><td></td></tr>`;
       for (const r of list) {
         const on = state.selected.has(String(r.id));
@@ -619,11 +652,11 @@
         const inv = r.invoice_no ? `<span class="sub2">${esc(r.invoice_no)}${r.invoiced_at ? " · " + esc(fmtDate(r.invoiced_at)) : ""}</span>` : "";
         const paid = r.paid_at ? `<span class="sub2">paid ${esc(fmtDate(r.paid_at))}</span>` : "";
         html += `<tr class="${on ? "selected" : ""}">
-          <td>${selectable(r) ? `<input type="checkbox" data-row="${r.id}" ${on ? "checked" : ""}>` : (isFin() ? `<span class="hint" title="Not submitted yet">—</span>` : "")}</td>
+          <td>${selectable(r) ? `<input type="checkbox" data-row="${r.id}" ${on ? "checked" : ""}>` : (INVOICING && isFin() ? `<span class="hint" title="Not submitted yet">—</span>` : "")}</td>
           <td class="nowrap">${esc(fmtDay(r.work_date))}</td>
           <td>${esc(r.consultant_name)}</td>
           <td>${esc(r.service_area)}<span class="sub2">${esc(r.work_type)}</span></td>
-          <td style="min-width:240px">${esc(r.narrative)}${r.comments ? `<span class="sub2">💬 ${esc(r.comments)}</span>` : ""}${(r.splits || []).length ? `<span class="sub2">🤝 ${esc(r.consultant_name)} ${Number(r.owner_share_pct)}% · ${r.splits.map((x) => `${esc(x.name)} ${Number(x.share_pct)}%`).join(" · ")}</span>` : ""}</td>
+          <td style="min-width:240px">${esc(r.narrative)}${r.comments ? `<span class="sub2">💬 ${esc(r.comments)}</span>` : ""}${(r.splits || []).length ? `<span class="sub2">🤝 Split: ${esc(allocationText(r))}</span>` : ""}</td>
           <td class="num">${r.hours != null ? round2(r.hours) : "—"}</td>
           <td class="num">${money(r.fee_amount)}</td>
           <td class="num">${exp ? money(exp) : "—"}</td>
@@ -643,6 +676,7 @@
   function selectedRows() { return invoiceSource().filter((r) => state.selected.has(String(r.id))); }
 
   function updateActionBar() {
+    if (!INVOICING) return;
     const rows = selectedRows();
     $("action-bar").hidden = !rows.length || !isFin();
     const excl = rows.reduce((a, r) => a + num(r.total_excl_vat), 0);
@@ -667,7 +701,7 @@
   }
   ["f-period", "f-status", "f-consultant", "f-client"].forEach((id) => $(id).addEventListener("change", onFilterChange));
   $("f-search").addEventListener("input", renderInvoicing);
-  $("act-clear").onclick = () => { state.selected.clear(); renderInvoicing(); };
+  if (INVOICING) $("act-clear").onclick = () => { state.selected.clear(); renderInvoicing(); };
 
   function openInvModal(mode) {
     const rows = selectedRows();
@@ -692,8 +726,10 @@
     $("inv-modal").hidden = false;
     setTimeout(() => (mode === "invoiced" ? $("inv-no") : $("inv-date")).focus(), 30);
   }
-  $("act-invoice").onclick = () => openInvModal("invoiced");
-  $("act-paid").onclick = () => openInvModal("paid");
+  if (INVOICING) {
+    $("act-invoice").onclick = () => openInvModal("invoiced");
+    $("act-paid").onclick = () => openInvModal("paid");
+  }
   $("inv-cancel").onclick = () => ($("inv-modal").hidden = true);
 
   $("inv-form").addEventListener("submit", async (e) => {
@@ -713,7 +749,7 @@
     state.selected.clear(); await reloadBillings();
   });
 
-  $("act-undo").onclick = async () => {
+  if (INVOICING) $("act-undo").onclick = async () => {
     const rows = selectedRows().filter((r) => r.status === "invoiced" || r.status === "paid");
     if (!rows.length) return toast("None of the selected lines are invoiced.", "error");
     const ok = await confirmBox({ title: "Undo invoicing?", body: `${rows.length} line${rows.length > 1 ? "s" : ""} will go back to <strong>final</strong> and lose their invoice number and payment date.`, yes: "Undo", danger: true });
@@ -760,18 +796,20 @@
           { header: "Total excl. VAT", key: "excl", type: "money", width: 14 },
           { header: "VAT", key: "vat", type: "money", width: 12 },
           { header: "Total incl. VAT", key: "incl", type: "money", width: 14 },
-          { header: "Split", key: "split", width: 24, wrap: true },
+          { header: "Split allocation (excl. VAT)", key: "split", width: 34, wrap: true },
           { header: "Comments", key: "comments", width: 26, wrap: true },
           { header: "Status", key: "status", width: 11 },
-          { header: "Invoice no.", key: "inv", width: 14 },
-          { header: "Invoice date", key: "invd", type: "date", width: 12 },
-          { header: "Paid date", key: "paid", type: "date", width: 12 },
+          ...(INVOICING ? [
+            { header: "Invoice no.", key: "inv", width: 14 },
+            { header: "Invoice date", key: "invd", type: "date", width: 12 },
+            { header: "Paid date", key: "paid", type: "date", width: 12 },
+          ] : []),
         ],
         rows: [...rows].sort((a, b) => a.client_name.localeCompare(b.client_name) || a.work_date.localeCompare(b.work_date)).map((r) => ({
           date: r.work_date, cons: r.consultant_name, client: r.client_name, contact: r.invoice_contact || "", area: r.service_area, type: r.work_type,
           narr: r.narrative, hours: r.hours, fee: r.fee_amount, exp: num(r.travel) + num(r.car_hire) + num(r.accommodation),
           excl: r.total_excl_vat, vat: r.vat_amount, incl: round2(num(r.total_excl_vat) + num(r.vat_amount)),
-          split: (r.splits || []).length ? `${r.consultant_name} ${Number(r.owner_share_pct)}%; ` + r.splits.map((x) => `${x.name} ${Number(x.share_pct)}%`).join("; ") : "",
+          split: (r.splits || []).length ? allocationText(r).replace(/ · /g, "\n") : "",
           comments: r.comments || "", status: r.status.charAt(0).toUpperCase() + r.status.slice(1),
           inv: r.invoice_no || "", invd: r.invoiced_at ? r.invoiced_at.slice(0, 10) : "", paid: r.paid_at ? r.paid_at.slice(0, 10) : "",
         })),
